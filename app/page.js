@@ -1,101 +1,146 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { useState, useRef } from 'react';
+import Image from 'next/image';
+import { useRouter } from 'next/navigation';
+import { useEnvironment } from '@/context/EnvironmentContext';
+import { useAuth } from '@/context/AuthContext';
+import TimeWidget from '@/components/Time';
+import Social from '@/components/Social';
+import TodoList from '@/components/TodoList';
+import PomodoroTimer from '@/components/PomodoroTimer';
+import StatsPopup from '@/components/stats/StatsPopup';
+import EnvironmentPanel from '@/components/environment/EnvironmentPanel';
+import MasterPlayer from '@/components/environment/MasterPlayer';
+import TopRightNav from '@/components/TopRightNav';
+import SignUpModal from '@/components/auth/SignUpModal';
+import { cn } from '@/lib/utils';
+import { Play, Pause } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+
+export default function PomodoroTimerPage() {
+  const [isTodoOpen, setIsTodoOpen] = useState(false);
+  const [isPomodoroOpen, setIsPomodoroOpen] = useState(false);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isEnvironmentPanelOpen, setIsEnvironmentPanelOpen] = useState(false);
+  const [isFeatureNavHovered, setIsFeatureNavHovered] = useState(false);
+  const [isTopHovered, setIsTopHovered] = useState(false);
+  const [isBottomHovered, setIsBottomHovered] = useState(false);
+
+  const { isGlobalPlaying, toggleGlobalPlay, youtube } = useEnvironment();
+  const { user, isSignUpModalOpen, openSignUpModal, closeSignUpModal } = useAuth();
+  const router = useRouter();
+  const updateTaskTimeRef = useRef(null);
+
+  const isUiVisible = !(youtube.id && youtube.showPlayer) || isTopHovered || isBottomHovered;
+
+  // --- Funnel Logic ---
+  const handleJournalClick = (e) => {
+    e.preventDefault();
+    if (!user) {
+      openSignUpModal();
+    } else {
+      router.push('/journal');
+    }
+  };
+
+  const navItems = [
+    { name: 'Environment', icon: '/theme.svg', action: () => setIsEnvironmentPanelOpen(true) },
+    { name: 'Stats', icon: '/stats.svg', action: () => setIsStatsOpen(true) },
+    { name: 'Pomodoro', icon: '/pomo.svg', action: () => setIsPomodoroOpen(true) },
+    { name: 'Todo', icon: '/todo.svg', action: () => setIsTodoOpen(true) },
+    { name: 'Journal', icon: '/journal.svg', isLink: true, href: '/journal', action: handleJournalClick },
+  ];
+
+  // Define the class variables for UI animations.
+  const topUiElementClass = cn("transition-all duration-300 ease-in-out pointer-events-auto", !isUiVisible && "opacity-0 -translate-y-4");
+  const bottomUiElementClass = cn("transition-all duration-300 ease-in-out pointer-events-auto", !isUiVisible && "opacity-0 translate-y-4");
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.js
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <>
+      <div className="relative h-screen overflow-hidden bg-black">
+        <MasterPlayer />
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        {/* Hover zones to control UI visibility */}
+        <div
+          className="absolute top-0 left-0 right-0 h-32 z-20"
+          onMouseEnter={() => setIsTopHovered(true)}
+          onMouseLeave={() => setIsTopHovered(false)}
+        />
+        <div
+          className="absolute bottom-0 left-0 right-0 h-48 z-20"
+          onMouseEnter={() => setIsBottomHovered(true)}
+          onMouseLeave={() => setIsBottomHovered(false)}
+        />
+
+        <div className="absolute inset-0 z-30 pointer-events-none">
+          {/* FIX: This div now correctly uses topUiElementClass */}
+          <div className={cn("absolute left-4 top-4 flex flex-col gap-4", topUiElementClass)}>
+            <Image width={50} height={50} src="/logo.jpg" alt="Work Station Logo" className="rounded-md" />
+            <div>
+              <h2 className='text-gray-300'>TODAY&apos;S FOCUS</h2>
+              <h1 className='text-2xl font-bold'>Focus Goal</h1>
+            </div>
+            <Button onClick={toggleGlobalPlay} variant="outline" size="icon" className="bg-black/20 border-white/20 hover:bg-white/20 text-white rounded-full">
+              {isGlobalPlaying ? <Pause size={20} /> : <Play size={20} />}
+            </Button>
+          </div>
+
+          <div className={cn('absolute right-4 top-4 flex flex-col items-end gap-4', topUiElementClass)}>
+            <TopRightNav />
+            <TimeWidget />
+          </div>
+
+          <div
+            className={cn("bottom w-full max-w-sm md:w-[30%] absolute flex justify-evenly items-center align-middle text-white pb-0 pt-2 left-1/2 -translate-x-1/2 gap-0 bottom-10 md:bottom-20 backdrop-blur-md rounded-full drop-shadow-xl", bottomUiElementClass)}
+            onMouseEnter={() => setIsFeatureNavHovered(true)}
+            onMouseLeave={() => setIsFeatureNavHovered(false)}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            {navItems.map((item, index) => {
+              const content = (
+                <div key={item.name} className="group flex flex-col items-center cursor-pointer p-2" onClick={item.action}>
+                  <Image className='w-5 h-5 group-hover:w-8 group-hover:h-8 transition-all duration-200' style={{ height: 'auto' }} width={20} height={20} src={item.icon} alt={item.name} />
+                  <span className={cn("mt-1 text-xs text-white transition-all duration-300 ease-out", isFeatureNavHovered ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none')} style={{ transitionDelay: `${index * 50}ms` }}>{item.name}</span>
+                </div>
+              );
+              if (item.isLink) {
+                return <a href={item.href} onClick={item.action} key={item.name} className="pointer-events-auto">{content}</a>;
+              }
+              return <div key={item.name} className="pointer-events-auto">{content}</div>;
+            })}
+          </div>
+
+          <div className={cn('absolute bottom-4 left-4', bottomUiElementClass)}>
+            <Social />
+          </div>
+
+          <div className={cn("absolute bottom-4 right-4", bottomUiElementClass)}>
+            <div className="relative group inline-block">
+              <Image src="/logo.jpg" alt="Logo" width={50} height={50} className="cursor-pointer rounded-md" />
+              <div className="absolute bottom-full right-0 mb-2 w-48 bg-gray-800 text-white text-sm rounded-lg shadow-lg p-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-200 ease-out transform origin-bottom-right z-10">
+                <div className="font-bold mb-1">Work Station</div>
+                <div className="mb-1">
+                  <a href="/help" className="underline hover:text-blue-300">Need Help</a>
+                  <span className="mx-1">|</span>
+                  <a href="/contact" className="underline hover:text-blue-300">Contact Me</a>
+                </div>
+                <div className="text-xs text-gray-400">v0.0.0</div>
+              </div>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
+
+        {/* Render the modal */}
+        <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={closeSignUpModal} />
+
+        <div className="pointer-events-auto">
+          {isPomodoroOpen && <PomodoroTimer isOpen={isPomodoroOpen} setIsOpen={setIsPomodoroOpen} onTaskTimeUpdateRef={updateTaskTimeRef} />}
+          {isTodoOpen && <TodoList isOpen={isTodoOpen} setIsOpen={setIsTodoOpen} onTaskTimeUpdateRef={updateTaskTimeRef} />}
+          {isStatsOpen && <StatsPopup isOpen={isStatsOpen} setIsOpen={setIsStatsOpen} />}
+          {isEnvironmentPanelOpen && <EnvironmentPanel isOpen={isEnvironmentPanelOpen} setIsOpen={setIsEnvironmentPanelOpen} />}
+        </div>
+      </div>
+    </>
   );
 }
+
