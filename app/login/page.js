@@ -6,13 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import Link from 'next/link';
 
-export default function LoginPage({ searchParams }) {
+export default async function LoginPage({ searchParams }) {
     const signIn = async (formData) => {
         'use server';
 
         const email = formData.get('email');
         const password = formData.get('password');
-        const supabase = createClient();
+        const supabase = await createClient();
 
         const { error } = await supabase.auth.signInWithPassword({
             email,
@@ -20,7 +20,8 @@ export default function LoginPage({ searchParams }) {
         });
 
         if (error) {
-            return redirect('/login?message=Could not authenticate user');
+            const msg = encodeURIComponent(error.message || 'Could not authenticate user');
+            return redirect(`/login?message=${msg}`);
         }
 
         return redirect('/');
@@ -28,8 +29,11 @@ export default function LoginPage({ searchParams }) {
 
     const signInWithGoogle = async () => {
         'use server';
-        const supabase = createClient();
-        const origin = headers().get('origin');
+        const supabase = await createClient();
+        const hdrs = await headers();
+        const headerOrigin = hdrs.get('origin');
+        const fallbackOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
+        const origin = headerOrigin || fallbackOrigin;
 
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
@@ -45,6 +49,8 @@ export default function LoginPage({ searchParams }) {
     };
 
 
+    const sp = await searchParams;
+
     return (
         <div className="flex items-center justify-center min-h-screen bg-gray-900">
             <Card className="w-full max-w-sm bg-gray-800 border-gray-700 text-white">
@@ -53,7 +59,7 @@ export default function LoginPage({ searchParams }) {
                     <CardDescription>Sign in to access your Work Station.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <form className="space-y-4">
+                    <form className="space-y-4" action={signIn}>
                         <Input
                             name="email"
                             placeholder="Email"
@@ -67,7 +73,7 @@ export default function LoginPage({ searchParams }) {
                             required
                             className="bg-gray-700 border-gray-600 placeholder-gray-400"
                         />
-                        <Button formAction={signIn} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">
+                        <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">
                             Sign In
                         </Button>
                     </form>
@@ -81,15 +87,15 @@ export default function LoginPage({ searchParams }) {
                         </div>
                     </div>
 
-                    <form>
-                        <Button formAction={signInWithGoogle} variant="outline" className="w-full border-gray-600 hover:bg-gray-700">
+                    <form action={signInWithGoogle}>
+                        <Button type="submit" variant="outline" className="w-full border-gray-600 hover:bg-gray-700">
                             Google
                         </Button>
                     </form>
 
-                    {searchParams?.message && (
+                    {sp?.message && (
                         <p className="mt-4 p-4 bg-red-900/50 text-red-300 text-center rounded-md">
-                            {searchParams.message}
+                            {sp.message}
                         </p>
                     )}
 

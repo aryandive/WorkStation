@@ -38,7 +38,8 @@ export default function PomodoroTimerPage() {
   const handleJournalClick = (e) => {
     e.preventDefault();
     if (!user) {
-      openSignUpModal();
+      // **CHANGE**: Instead of opening a modal, redirect to the landing page.
+      router.push('/landing');
     } else {
       router.push('/journal');
     }
@@ -130,7 +131,9 @@ export default function PomodoroTimerPage() {
           </div>
         </div>
 
-        {/* Render the modal */}
+        {/* The sign-up modal can now be removed from this page if you wish,
+            as the primary funnel has changed. However, it can be kept for other
+            potential upgrade paths. I'll leave it for now. */}
         <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={closeSignUpModal} />
 
         <div className="pointer-events-auto">
@@ -143,4 +146,3 @@ export default function PomodoroTimerPage() {
     </>
   );
 }
-

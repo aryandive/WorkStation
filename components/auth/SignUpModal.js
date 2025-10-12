@@ -39,7 +39,7 @@ export default function SignUpModal({ isOpen, setIsOpen }) {
                     </div>
                 </div>
                 <div className="flex flex-col gap-2">
-                    <Link href="/landing" passHref>
+                    <Link href="/signup" passHref>
                         <Button className="w-full bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold text-base py-6 rounded-lg hover:from-yellow-400 hover:to-yellow-500 transition-all duration-300 shadow-lg hover:shadow-yellow-500/20">
                             Create Free Account & Save
                         </Button>
