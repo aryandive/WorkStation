@@ -1,8 +1,7 @@
 // Trigger vercel sync
 "use client";
 
-import { useState, useRef } from 'react';
-// import { useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEnvironment } from '@/context/EnvironmentContext';
@@ -19,7 +18,6 @@ import SignUpModal from '@/components/auth/SignUpModal';
 import { cn } from '@/lib/utils';
 import { Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-// import { createClient } from '@/utils/supabase/client'; // Make sure this import is here
 
 export default function PomodoroTimerPage() {
   const [isTodoOpen, setIsTodoOpen] = useState(false);
@@ -35,28 +33,21 @@ export default function PomodoroTimerPage() {
   const router = useRouter();
   const updateTaskTimeRef = useRef(null);
 
-  // ADD THIS NEW useEffect HOOK FOR PASSWORD RECOVERY
-  // useEffect(() => {
-  //   const supabase = createClient();
-  //   const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-  //     // This checks if the user just came from a password recovery link
-  //     if (event === 'PASSWORD_RECOVERY') {
-  //       router.push('/update-password');
-  //     }
-  //   });
+  // **THIS IS THE NEW, MORE RELIABLE LOGIC**
+  useEffect(() => {
+    // On component mount, check if the URL hash contains 'type=recovery'
+    // This is a direct way to catch the password reset flow.
+    if (window.location.hash.includes('type=recovery')) {
+      router.push('/update-password');
+    }
+  }, [router]);
 
-  //   return () => {
-  //     subscription.unsubscribe();
-  //   };
-  // }, [router]);
 
   const isUiVisible = !(youtube.id && youtube.showPlayer) || isTopHovered || isBottomHovered;
 
-  // --- Funnel Logic ---
   const handleJournalClick = (e) => {
     e.preventDefault();
     if (!user) {
-      // **CHANGE**: Instead of opening a modal, redirect to the landing page.
       router.push('/landing');
     } else {
       router.push('/journal');
@@ -71,7 +62,6 @@ export default function PomodoroTimerPage() {
     { name: 'Journal', icon: '/journal.svg', isLink: true, href: '/journal', action: handleJournalClick },
   ];
 
-  // Define the class variables for UI animations.
   const topUiElementClass = cn("transition-all duration-300 ease-in-out pointer-events-auto", !isUiVisible && "opacity-0 -translate-y-4");
   const bottomUiElementClass = cn("transition-all duration-300 ease-in-out pointer-events-auto", !isUiVisible && "opacity-0 translate-y-4");
 
@@ -80,7 +70,6 @@ export default function PomodoroTimerPage() {
       <div className="relative h-screen overflow-hidden bg-black">
         <MasterPlayer />
 
-        {/* Hover zones to control UI visibility */}
         <div
           className="absolute top-0 left-0 right-0 h-32 z-20"
           onMouseEnter={() => setIsTopHovered(true)}
@@ -93,7 +82,6 @@ export default function PomodoroTimerPage() {
         />
 
         <div className="absolute inset-0 z-30 pointer-events-none">
-          {/* FIX: This div now correctly uses topUiElementClass */}
           <div className={cn("absolute left-4 top-4 flex flex-col gap-4", topUiElementClass)}>
             <Image width={50} height={50} src="/logo.jpg" alt="Work Station Logo" className="rounded-md" />
             <div>
@@ -149,9 +137,6 @@ export default function PomodoroTimerPage() {
           </div>
         </div>
 
-        {/* The sign-up modal can now be removed from this page if you wish,
-            as the primary funnel has changed. However, it can be kept for other
-            potential upgrade paths. I'll leave it for now. */}
         <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={closeSignUpModal} />
 
         <div className="pointer-events-auto">
