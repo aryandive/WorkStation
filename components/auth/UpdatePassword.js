@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-export default function UpdatePasswordPage() {
+export default function UpdatePassword() {
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
     const router = useRouter();
@@ -23,14 +23,16 @@ export default function UpdatePasswordPage() {
             setMessage(`Error: ${error.message}`);
         } else {
             setMessage('Your password has been updated successfully! Redirecting to login...');
+            // Clear the hash from the URL and push to login page after a delay
             setTimeout(() => {
+                window.location.hash = '';
                 router.push('/login');
             }, 2000);
         }
     };
 
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-900">
+        <div className="fixed inset-0 bg-gray-900/80 backdrop-blur-md z-50 flex items-center justify-center animate-in fade-in">
             <Card className="w-full max-w-sm bg-gray-800 border-gray-700 text-white">
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl font-bold">Choose a New Password</CardTitle>
