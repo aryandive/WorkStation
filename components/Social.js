@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import insta from '../public/social/insta.svg'; // Replace with your actual SVG path
+//import insta from '../public/social/insta.svg'; // Replace with your actual SVG path
 
 export default function Social() {
     const [open, setOpen] = useState(false);
