@@ -1,6 +1,7 @@
+// for gemini copy/components/auth/UpdatePassword.js
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -10,22 +11,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 export default function UpdatePassword() {
     const [password, setPassword] = useState('');
     const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false);
     const router = useRouter();
     const supabase = createClient();
 
     const handleUpdatePassword = async (e) => {
         e.preventDefault();
+        setLoading(true);
         setMessage('');
 
         const { error } = await supabase.auth.updateUser({ password: password });
 
         if (error) {
             setMessage(`Error: ${error.message}`);
+            setLoading(false);
         } else {
             setMessage('Your password has been updated successfully! Redirecting to login...');
-            // Clear the hash from the URL and push to login page after a delay
             setTimeout(() => {
-                window.location.hash = '';
                 router.push('/login');
             }, 2000);
         }
@@ -49,8 +51,8 @@ export default function UpdatePassword() {
                             onChange={(e) => setPassword(e.target.value)}
                             className="bg-gray-700 border-gray-600 placeholder-gray-400"
                         />
-                        <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">
-                            Update Password
+                        <Button type="submit" disabled={loading} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold disabled:opacity-50">
+                            {loading ? 'Updating...' : 'Update Password'}
                         </Button>
                     </form>
                     {message && (
