@@ -1,7 +1,7 @@
 // Trigger vercel sync
 "use client";
- 
-import { useState, useRef } from 'react';
+
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEnvironment } from '@/context/EnvironmentContext';
@@ -18,6 +18,7 @@ import SignUpModal from '@/components/auth/SignUpModal';
 import { cn } from '@/lib/utils';
 import { Play, Pause } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { createClient } from '@/utils/supabase/client'; // Make sure this import is here
 
 export default function PomodoroTimerPage() {
   const [isTodoOpen, setIsTodoOpen] = useState(false);
@@ -32,6 +33,21 @@ export default function PomodoroTimerPage() {
   const { user, isSignUpModalOpen, openSignUpModal, closeSignUpModal } = useAuth();
   const router = useRouter();
   const updateTaskTimeRef = useRef(null);
+
+  // ADD THIS NEW useEffect HOOK FOR PASSWORD RECOVERY
+  useEffect(() => {
+    const supabase = createClient();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // This checks if the user just came from a password recovery link
+      if (event === 'PASSWORD_RECOVERY') {
+        router.push('/update-password');
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [router]);
 
   const isUiVisible = !(youtube.id && youtube.showPlayer) || isTopHovered || isBottomHovered;
 
