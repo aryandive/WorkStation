@@ -1,18 +1,21 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { saveLocalJournal, getLocalJournalByDate, getLocalJournals } from '@/lib/localJournal';
-import { supabase } from '@/lib/supabaseClient';
+import { useRouter } from 'next/navigation'; // Import useRouter
+import { saveLocalJournal, getLocalJournals, countLocalJournals } from '@/lib/localJournal';
+import { createClient } from '@/utils/supabase/client';
 import eventBus from '@/lib/eventBus';
 import {
-    ChevronLeft, ChevronRight, RefreshCw, Bold, Italic, List, Heading1, Heading2, Search, Calendar as CalendarIcon, Type as ParagraphIcon, Bot, Lock, Edit
+    ChevronLeft, ChevronRight, RefreshCw, Bold, Italic, List, Heading1, Heading2, Search, Calendar as CalendarIcon, Type as ParagraphIcon, Bot, Lock, Edit, Zap
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import SignUpModal from '@/components/auth/SignUpModal'; // Import the modal
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
+import { useSubscription } from '@/context/SubscriptionContext'; // Import useSubscription
+import Link from 'next/link';
 
-// --- Reusable Sub-Components ---
+// --- Reusable Sub-Components (assuming they are defined in the same file or imported) ---
 const Greeting = ({ greeting }) => (
     <div className="flex items-center gap-4 animate-fade-in">
         <h1 className="text-4xl lg:text-5xl font-bold z-20 bg-gradient-to-r from-yellow-300 to-yellow-500 bg-clip-text text-transparent">
@@ -43,7 +46,7 @@ const ActivityRing = ({ percentage, color, label, value }) => {
     );
 };
 
-
+// ... (Prompt, Calendar, and other sub-components remain the same) ...
 const highPerformancePrompts = ["You had a great focus day! What was your secret to success?", "You completed a lot of tasks today. What was your biggest win?", "Momentum was on your side. How can you carry this into tomorrow?"];
 const lowPerformancePrompts = ["It looks like today was a challenge. What were some of the blockers you faced?", "What was the biggest distraction for you today?", "What's one small thing you can change to make tomorrow more focused?"];
 const generalPrompts = ["What are you most grateful for right now?", "Describe one thing you learned today, big or small.", "What was the most interesting problem you worked on today?"];
@@ -157,11 +160,10 @@ const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
     );
 };
 
-const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMode, setIsEditMode }) => {
+const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMode, setIsEditMode, isSavingDisabled, entryCount }) => {
     const editorRef = useRef(null);
-    const [isSaving, setIsSaving] = useState(false);
 
-    const isLocked = isPastDate && !isEditMode;
+    const isLocked = (isPastDate && !isEditMode) || isSavingDisabled;
 
     useEffect(() => {
         if (editorRef.current && editorRef.current.innerHTML !== entry.content) {
@@ -172,8 +174,6 @@ const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMod
     const handleContentChange = (e) => {
         if (isLocked) return;
         onEntryChange({ ...entry, content: e.currentTarget.innerHTML });
-        setIsSaving(true);
-        setTimeout(() => setIsSaving(false), 1000);
     };
     const handleTitleChange = (e) => {
         if (isLocked) return;
@@ -192,9 +192,19 @@ const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMod
                 <input value={entry.title || ''} onChange={handleTitleChange} disabled={isLocked} className="bg-transparent text-2xl lg:text-3xl font-bold w-full focus:outline-none border-b-2 border-transparent focus:border-yellow-500 transition-all duration-300 pb-1 disabled:opacity-70" placeholder="Journal Entry Title" />
                 <div className="relative">
                     <Image src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNTFmM2U3ZDAxMDRmOTczZGIyNDkyODYzOTczY2I1MjZkYmFjNGE2ZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/RgzryV9I1h5oYc1R26/giphy.gif" alt="Decorative animation" width={48} height={48} unoptimized={true} className="w-12 h-12 rounded-full flex-shrink-0 border-2 border-yellow-500 shadow-lg" />
-                    {isSaving && (<div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full animate-pulse"></div>)}
                 </div>
             </div>
+
+            {isSavingDisabled && (
+                <div className="mb-4 p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg text-center">
+                    <p className="font-bold text-yellow-300">Journal Limit Reached</p>
+                    <p className="text-sm text-yellow-200/90 mt-1">You&apos;ve reached the 30-entry limit for the free plan.</p>
+                    <Button asChild size="sm" className="mt-3 bg-yellow-500 text-gray-900 hover:bg-yellow-400">
+                        <Link href="/pricing"><Zap size={14} className="mr-2" /> Upgrade to Pro for Unlimited Entries</Link>
+                    </Button>
+                </div>
+            )}
+
             <div className="flex-shrink-0 flex items-center gap-4 md:gap-6 mb-6 p-4 bg-black/30 rounded-xl backdrop-blur-sm border border-gray-700/50">
                 <h3 className="font-bold text-gray-400 hidden sm:block">Today&apos;s Focus:</h3>
                 <div className="flex items-center gap-4 md:gap-6 w-full justify-around sm:justify-start">
@@ -212,49 +222,64 @@ const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMod
                 <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={18} /></button>
                 <div className="ml-auto flex items-center gap-2">
                     {isPastDate && (entry.content && entry.content.replace(/<[^>]*>/g, '').trim() !== '') && !isEditMode && (
-                        <Button onClick={() => setIsEditMode(true)} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900"><Edit size={16} className="mr-2" /> Edit Entry</Button>
+                        <Button onClick={() => setIsEditMode(true)} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900" disabled={isSavingDisabled}><Edit size={16} className="mr-2" /> Edit Entry</Button>
                     )}
                     {isPastDate && isEditMode && (
                         <Button onClick={() => setIsEditMode(false)} variant="outline" className="text-yellow-400 border-yellow-500 hover:bg-yellow-500/10"><Lock size={16} className="mr-2" /> Save & Lock</Button>
                     )}
-                    {isSaving && <div className="text-xs text-gray-500 flex items-center"><div className="w-2 h-2 bg-yellow-500 rounded-full mr-1 animate-pulse"></div> Saving...</div>}
                 </div>
             </div>
-            <div ref={editorRef} contentEditable={!isLocked} onInput={handleContentChange} className={`prose prose-invert max-w-none flex-grow overflow-y-auto custom-scrollbar p-4 leading-relaxed bg-gray-900/50 rounded-xl border border-gray-700/30 focus:outline-none transition-all duration-300 ${isLocked ? 'focus:ring-0 opacity-70' : 'focus:ring-2 focus:ring-yellow-500'}`} placeholder="Start writing here..."></div>
+            <div ref={editorRef} contentEditable={!isLocked} onInput={handleContentChange} className={`prose prose-invert max-w-none flex-grow overflow-y-auto custom-scrollbar p-4 leading-relaxed bg-gray-900/50 rounded-xl border border-gray-700/30 focus:outline-none transition-all duration-300 ${isLocked ? 'focus:ring-0 opacity-70 cursor-not-allowed' : 'focus:ring-2 focus:ring-yellow-500'}`} placeholder="Start writing here..."></div>
         </section>
     );
 };
 
-
 // --- Main Journal Page ---
 export default function JournalPage() {
+    const { user, loading: authLoading } = useAuth();
+    const { isPro, loading: subLoading } = useSubscription();
+    const router = useRouter();
+    const supabase = createClient();
+
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [entry, setEntry] = useState({ id: null, date: null, title: '', content: '' });
     const [allEntries, setAllEntries] = useState({});
     const [greeting, setGreeting] = useState('');
-    const [reducedMotion, setReducedMotion] = useState(false);
     const [dailyStats, setDailyStats] = useState({ focus: { percentage: 0, value: '0/120m' }, tasks: { percentage: 0, value: '0/0' }, sessions: { percentage: 0, value: '0/0' }, });
-    const [user, setUser] = useState(null);
-    const [autoJournal, setAutoJournal] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredEntryDays, setFilteredEntryDays] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
-    const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false); // State for modal
-    const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
 
-    const fetchJournalEntries = useCallback(async (currentUser) => {
-        if (currentUser) {
+    const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+    const journalEntryCount = Object.keys(allEntries).length;
+    const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
+
+    // **NEW**: Combined loading state
+    const isLoading = authLoading || subLoading;
+
+    // --- Data Fetching and Side Effects ---
+
+    useEffect(() => {
+        // Redirect anonymous users
+        if (!isLoading && !user) {
+            router.push('/landing');
+        }
+    }, [user, isLoading, router]);
+
+    const fetchJournalEntries = useCallback(async () => {
+        if (isLoading || !user) return; // Wait for loading to finish and user to be present
+
+        if (isPro) { // Premium User
             const { data, error } = await supabase
                 .from('journal_entries')
                 .select('*')
-                .eq('user_id', currentUser.id);
+                .eq('user_id', user.id);
 
             if (error) {
                 console.error("Error fetching journal entries:", error);
                 setAllEntries({});
             } else {
                 const entriesMap = data.reduce((acc, entry) => {
-                    // Assuming 'date' column is 'YYYY-MM-DD'
                     const date = new Date(entry.date + 'T12:00:00Z');
                     const key = getDateKey(date);
                     acc[key] = entry;
@@ -262,10 +287,11 @@ export default function JournalPage() {
                 }, {});
                 setAllEntries(entriesMap);
             }
-        } else {
+        } else { // Free Tier User
             setAllEntries(getLocalJournals());
         }
-    }, []);
+    }, [user, isPro, isLoading, supabase]);
+
 
     const fetchDailyStats = useCallback(async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -302,58 +328,39 @@ export default function JournalPage() {
     }, []);
 
     useEffect(() => {
-        const initialize = async () => {
-            if (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-                setReducedMotion(true);
-            }
+        const initialize = () => {
             const hour = new Date().getHours();
-            setGreeting(hour < 12 ? 'Good Morning, Aryan' : hour < 18 ? 'Good Afternoon, Aryan' : 'Good Evening, Aryan');
-
-            const { data: { user } } = await supabase.auth.getUser();
-            setUser(user);
-            fetchJournalEntries(user);
+            setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
             fetchDailyStats();
 
             const handleTasksUpdated = () => fetchDailyStats();
             eventBus.on('tasksUpdated', handleTasksUpdated);
-            const handleVisibilityChange = () => { if (document.visibilityState === 'visible') fetchDailyStats(); };
-            document.addEventListener('visibilitychange', handleVisibilityChange);
 
-            const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-                const currentUser = session?.user ?? null;
-                setUser(currentUser);
-                fetchJournalEntries(currentUser); // Fetch entries on auth change
-                fetchDailyStats();
-            });
-
-            return () => {
-                eventBus.remove('tasksUpdated', handleTasksUpdated);
-                document.removeEventListener('visibilitychange', handleVisibilityChange);
-                authListener.subscription.unsubscribe();
-            };
+            return () => eventBus.remove('tasksUpdated', handleTasksUpdated);
         };
         initialize();
-    }, [fetchDailyStats, fetchJournalEntries]);
+    }, [fetchDailyStats]);
+
+    useEffect(() => {
+        fetchJournalEntries();
+    }, [fetchJournalEntries]); // Re-fetch when user/pro status changes
 
     useEffect(() => {
         const dateKey = getDateKey(selectedDate);
         const savedEntry = allEntries[dateKey] || {};
         const title = savedEntry.title || selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
         setEntry({
-            id: savedEntry.id || null, // Use Supabase ID if available
+            id: savedEntry.id || null,
             date: dateKey,
             title,
             content: savedEntry.content || ''
         });
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const checkDate = new Date(selectedDate);
-        checkDate.setHours(0, 0, 0, 0);
-
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
         setIsEditMode(checkDate >= today);
     }, [selectedDate, allEntries]);
 
+    // --- Search Filtering ---
     useEffect(() => {
         if (searchQuery.trim() === '') {
             setFilteredEntryDays(null);
@@ -365,18 +372,22 @@ export default function JournalPage() {
         setFilteredEntryDays(filteredDays);
     }, [searchQuery, allEntries]);
 
+    // --- Entry Saving Logic ---
     const timeoutRef = useRef(null);
     const handleEntryChange = useCallback((newEntry) => {
         setEntry(newEntry);
-        if (!user) {
-            setIsSignUpModalOpen(true);
+
+        // Prevent saving for free tier if limit is reached and it's a new entry
+        const dateKey = getDateKey(selectedDate);
+        const isNewEntry = !allEntries[dateKey];
+        if (isFreeTierLimitReached && isNewEntry) {
+            return;
         }
 
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(async () => {
-            const dateKey = getDateKey(selectedDate);
-            if (user) {
-                // Save to Supabase
+            if (user && isPro) {
+                // Save to Supabase for Pro users
                 const { data, error } = await supabase
                     .from('journal_entries')
                     .upsert({
@@ -385,34 +396,34 @@ export default function JournalPage() {
                         date: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).toISOString().split('T')[0],
                         title: newEntry.title,
                         content: newEntry.content,
-                    }, { onConflict: 'user_id,date' })
+                    }, { onConflict: 'id' }) // Use 'id' for conflict to ensure upsert works correctly
                     .select()
                     .single();
 
                 if (error) {
-                    console.error("Error saving journal to Supabase:", error);
+                    console.error("Error saving to Supabase:", error);
                 } else if (data) {
-                    // Update state with the returned data, including the new ID if it was an insert
                     setAllEntries(prev => ({ ...prev, [dateKey]: data }));
-                    if (!newEntry.id) {
-                        setEntry(prev => ({ ...prev, id: data.id }));
-                    }
+                    if (!newEntry.id) setEntry(prev => ({ ...prev, id: data.id }));
                 }
-            } else {
-                // Save to local storage for anonymous users
+            } else if (user) {
+                // Save to local storage for Free users
                 saveLocalJournal(dateKey, { title: newEntry.title, content: newEntry.content });
-                const updatedEntries = getLocalJournals();
-                setAllEntries(updatedEntries);
+                setAllEntries(getLocalJournals());
             }
         }, 1000);
-    }, [selectedDate, user]);
+    }, [selectedDate, user, isPro, isFreeTierLimitReached, allEntries, supabase]);
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const checkDate = new Date(selectedDate);
-    checkDate.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
     const isPastDate = checkDate < today;
 
+    // Loading state for initial auth/sub check
+    if (isLoading) {
+        return <div className="min-h-screen w-full bg-gray-950 flex items-center justify-center text-white">Loading your journal...</div>;
+    }
+
+    // Render the journal page
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-gray-900 to-gray-950 text-gray-100 font-sans">
             <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} />
@@ -473,7 +484,7 @@ export default function JournalPage() {
                 <header className="flex-shrink-0 h-48 lg:h-56 relative flex justify-center items-center rounded-2xl overflow-hidden shadow-xl">
                     <div className="absolute inset-0 bg-gradient-to-r from-purple-900/70 via-blue-900/50 to-indigo-900/70 z-0"></div>
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-gray-900/80 to-gray-950 z-10"></div>
-                    <Greeting greeting={greeting} />
+                    <Greeting greeting={`${greeting}, ${user?.email?.split('@')[0] || 'Explorer'}`} />
                 </header>
                 <main className="flex-grow flex flex-col lg:flex-row gap-5">
                     <aside className="w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5">
@@ -495,14 +506,19 @@ export default function JournalPage() {
                         <Calendar onDateSelect={setSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
                         <Prompt dailyStats={dailyStats} />
 
-                        {user && (
+                        {!isPro && user && (
                             <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
                                 <div className="flex items-center justify-between">
-                                    <Label htmlFor="auto-journal" className="flex flex-col space-y-1">
-                                        <span className="font-medium text-white">Automated Daily Log</span>
-                                        <span className="font-normal text-sm text-gray-400">Auto-add entry on task completion.</span>
+                                    <Label className="flex flex-col space-y-1">
+                                        <span className="font-medium text-white">Journal Entries</span>
+                                        <span className="font-normal text-sm text-gray-400">{journalEntryCount} / 30 used</span>
                                     </Label>
-                                    <Switch id="auto-journal" checked={autoJournal} onCheckedChange={setAutoJournal} />
+                                    <Button asChild size="sm" className="bg-yellow-500 text-gray-900 hover:bg-yellow-400">
+                                        <Link href="/pricing">Upgrade</Link>
+                                    </Button>
+                                </div>
+                                <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2">
+                                    <div className="bg-yellow-500 h-2.5 rounded-full" style={{ width: `${(journalEntryCount / 30) * 100}%` }}></div>
                                 </div>
                             </div>
                         )}
@@ -515,6 +531,8 @@ export default function JournalPage() {
                         isPastDate={isPastDate}
                         isEditMode={isEditMode}
                         setIsEditMode={setIsEditMode}
+                        isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
+                        entryCount={journalEntryCount}
                     />
                 </main>
             </div>
