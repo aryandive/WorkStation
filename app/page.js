@@ -33,16 +33,6 @@ export default function PomodoroTimerPage() {
   const router = useRouter();
   const updateTaskTimeRef = useRef(null);
 
-  // **THIS IS THE NEW, MORE RELIABLE LOGIC**
-  useEffect(() => {
-    // On component mount, check if the URL hash contains 'type=recovery'
-    // This is a direct way to catch the password reset flow.
-    if (window.location.hash.includes('type=recovery')) {
-      router.push('/update-password');
-    }
-  }, [router]);
-
-
   const isUiVisible = !(youtube.id && youtube.showPlayer) || isTopHovered || isBottomHovered;
 
   const handleJournalClick = (e) => {
