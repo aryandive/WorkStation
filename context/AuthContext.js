@@ -8,7 +8,7 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
     const [user, setUser] = useState(null);
     const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
-    const [loading, setLoading] = useState(true); // Add loading state
+    const [loading, setLoading] = useState(true);
     const supabase = createClient();
 
     useEffect(() => {
@@ -31,7 +31,7 @@ export function AuthProvider({ children }) {
 
     const value = {
         user,
-        loading, // Expose loading state
+        loading,
         isSignUpModalOpen,
         openSignUpModal: () => setIsSignUpModalOpen(true),
         closeSignUpModal: () => setIsSignUpModalOpen(false),
@@ -47,4 +47,3 @@ export function useAuth() {
     }
     return context;
 }
-

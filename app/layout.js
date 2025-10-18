@@ -3,6 +3,7 @@ import "./globals.css";
 import { EnvironmentProvider } from "@/context/EnvironmentContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { SubscriptionProvider } from "@/context/SubscriptionContext"; // Import the new provider
+import HashAuthHandler from "@/components/auth/HashAuthHandler";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,6 +29,7 @@ export default function RootLayout({ children }) {
         <AuthProvider>
           <SubscriptionProvider> {/* Wrap with SubscriptionProvider */}
             <EnvironmentProvider>
+              <HashAuthHandler />
               {children}
             </EnvironmentProvider>
           </SubscriptionProvider>
