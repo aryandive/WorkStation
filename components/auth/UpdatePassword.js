@@ -1,7 +1,7 @@
 // for gemini copy/components/auth/UpdatePassword.js
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/utils/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function UpdatePassword() {
     const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
     const router = useRouter();
@@ -17,6 +18,16 @@ export default function UpdatePassword() {
 
     const handleUpdatePassword = async (e) => {
         e.preventDefault();
+        
+        if (password !== confirmPassword) {
+            setMessage('Error: Passwords do not match');
+            return;
+        }
+        if (password.length < 6) {
+            setMessage('Error: Password must be at least 6 characters long');
+            return;
+        }
+
         setLoading(true);
         setMessage('');
 
@@ -26,7 +37,7 @@ export default function UpdatePassword() {
             setMessage(`Error: ${error.message}`);
             setLoading(false);
         } else {
-            setMessage('Your password has been updated successfully! Redirecting to login...');
+            setMessage('Success! Your password has been updated. Redirecting to login...');
             setTimeout(() => {
                 router.push('/login');
             }, 2000);
@@ -44,11 +55,18 @@ export default function UpdatePassword() {
                     <form onSubmit={handleUpdatePassword} className="space-y-4">
                         <Input
                             type="password"
-                            name="password"
                             placeholder="New Password"
                             required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            className="bg-gray-700 border-gray-600 placeholder-gray-400"
+                        />
+                        <Input
+                            type="password"
+                            placeholder="Confirm New Password"
+                            required
+                            value={confirmPassword}
+                            onChange={(e) => setConfirmPassword(e.target.value)}
                             className="bg-gray-700 border-gray-600 placeholder-gray-400"
                         />
                         <Button type="submit" disabled={loading} className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold disabled:opacity-50">
@@ -56,9 +74,13 @@ export default function UpdatePassword() {
                         </Button>
                     </form>
                     {message && (
-                        <p className="mt-4 p-4 bg-gray-700 text-center text-gray-300 rounded-md">
+                        <div className={`mt-4 p-3 text-center rounded-md text-sm ${
+                            message.includes('Error') 
+                                ? 'bg-red-900/50 text-red-300' 
+                                : 'bg-green-900/50 text-green-300'
+                        }`}>
                             {message}
-                        </p>
+                        </div>
                     )}
                 </CardContent>
             </Card>

@@ -10,33 +10,27 @@ export default function HashAuthHandler() {
     const supabase = createClient();
 
     useEffect(() => {
-        const hash = window.location.hash;
-        const params = new URLSearchParams(hash.substring(1));
-        const type = params.get('type');
-        const accessToken = params.get('access_token');
-
-        // Only act on password recovery links
-        if (type === 'recovery' && accessToken) {
-            const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-                // Wait for the specific 'SIGNED_IN' event which confirms session establishment
-                if (event === 'SIGNED_IN' && session) {
-                    // Unsubscribe to avoid this running again
-                    subscription.unsubscribe();
-
-                    // Clean the URL of sensitive tokens
-                    window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
-
-                    // Now it's safe to redirect
-                    router.replace('/update-password');
-                }
-            });
-
-            return () => {
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            // This is the correct event for password resets.
+            if (event === 'PASSWORD_RECOVERY') {
+                // This event fires after Supabase processes the recovery token
+                // from the URL hash and establishes a secure session.
+                
+                // Unsubscribe to prevent this listener from firing again.
                 subscription.unsubscribe();
-            };
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+
+                // It is now safe to redirect to the update password page.
+                router.replace('/update-password');
+            }
+        });
+
+        // Cleanup function to unsubscribe when the component unmounts.
+        return () => {
+            subscription.unsubscribe();
+        };
+    // The empty dependency array ensures this listener is set up only once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    return null;
+    return null; // This component renders nothing.
 }
