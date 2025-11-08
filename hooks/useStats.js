@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+//import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@/utils/supabase/client'; // ADDED
 import eventBus from '@/lib/eventBus';
 
 export default function useStats() {
@@ -16,6 +17,7 @@ export default function useStats() {
         focusByProject: [],
     });
     const [loading, setLoading] = useState(true);
+    const supabase = createClient(); // ADDED initialization
 
     const fetchAndCalculateStats = useCallback(async () => {
         setLoading(true);
@@ -34,7 +36,7 @@ export default function useStats() {
         }));
 
         setLoading(false);
-    }, []);
+    }, [supabase]); // ADDED supabase as dependency
 
     useEffect(() => {
         fetchAndCalculateStats();
@@ -48,7 +50,7 @@ export default function useStats() {
             eventBus.remove('tasksUpdated', handleUpdate);
             authListener.subscription.unsubscribe();
         };
-    }, [fetchAndCalculateStats]);
+    }, [fetchAndCalculateStats, supabase.auth]); // ADDED supabase.auth as dependency
 
     return { stats, loading };
 }

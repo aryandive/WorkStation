@@ -5,7 +5,8 @@ import usePomodoroTimer from '@/hooks/usePomodoroTimer';
 import SessionSettings from '@/components/pomodoro/SessionSettings';
 import ProgressCircle from '@/components/pomodoro/ProgressCircle';
 import TimerControls from '@/components/pomodoro/TimerControls';
-import { supabase } from '@/lib/supabaseClient';
+//import { supabase } from '@/lib/supabaseClient';
+import { createClient } from '@/utils/supabase/client'; // ADDED
 import { LinkIcon, Settings, Minimize2, Maximize2, X } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     const [linkedTask, setLinkedTask] = useState(null);
     const [isMinimized, setIsMinimized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const supabase = createClient(); // ADDED initialization
 
     // FIX: Use a ref to hold the linkedTask to avoid stale closures in the callback.
     const linkedTaskRef = useRef(linkedTask);
@@ -46,9 +48,9 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     useEffect(() => {
         if (isOpen) {
             const fetchUserAndTasks = async () => {
-                const { data: { user } } = await supabase.auth.getUser();
+                const { data: { user } } = await supabase.auth.getUser(); // Uses initialized client
                 if (user) {
-                    const { data, error } = await supabase.from('todos').select('id, task').eq('user_id', user.id).eq('is_complete', false).is('parent_task_id', null);
+                    const { data, error } = await supabase.from('todos').select('id, task').eq('user_id', user.id).eq('is_complete', false).is('parent_task_id', null); // Uses initialized client
                     if (error) console.error('Error fetching tasks for pomodoro:', error);
                     else setTasks(data || []);
                 } else {
@@ -58,7 +60,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
             };
             fetchUserAndTasks();
         }
-    }, [isOpen]);
+    }, [isOpen, supabase]); // ADDED supabase as dependency
 
 
     if (!isOpen) return null;

@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabaseClient';
+// import { supabase } from '@/lib/supabaseClient'; // REMOVED
+import { createClient } from '@/utils/supabase/client'; // ADDED
 import { format } from "date-fns";
 import eventBus from '@/lib/eventBus';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,8 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
     const [loading, setLoading] = useState(true);
     // In a real app, this setting would be fetched from the user's profile
     const [isAutoJournalingEnabled, setIsAutoJournalingEnabled] = useState(true);
+
+    const supabase = createClient(); // ADDED initialization
 
     // Create a ref for the audio element
     const completionSoundRef = useRef(null);
@@ -82,7 +85,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
             }
         }
         setLoading(false);
-    }, [activeProjectId]);
+    }, [activeProjectId, supabase]); // ADDED supabase as dependency
 
     const updateTask = useCallback(async (taskId, updates) => {
         const originalTasks = [...tasks];
@@ -133,7 +136,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                 }
             }
         }
-    }, [user, tasks, isAutoJournalingEnabled]);
+    }, [user, tasks, isAutoJournalingEnabled, supabase]); // ADDED supabase as dependency
 
 
     const handleTaskTimeUpdate = useCallback(async (taskId, completedPomodoros = 1) => {
@@ -168,7 +171,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
         if (isOpen) {
             getInitialUser();
         }
-    }, [isOpen, fetchData]);
+    }, [isOpen, fetchData, supabase.auth]); // ADDED supabase.auth as dependency
 
 
     useEffect(() => {
