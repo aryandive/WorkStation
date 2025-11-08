@@ -14,6 +14,8 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext'; // Import useAuth
 import { useSubscription } from '@/context/SubscriptionContext'; // Import useSubscription
 import Link from 'next/link';
+// --- ADDON: Import SignUpModal (or a new "Migration Success" modal)
+import SignUpModal from '@/components/auth/SignUpModal'; // Re-using this modal for now
 
 // --- Reusable Sub-Components (assuming they are defined in the same file or imported) ---
 const Greeting = ({ greeting }) => (
@@ -250,6 +252,11 @@ export default function JournalPage() {
     const [filteredEntryDays, setFilteredEntryDays] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
 
+    // --- ADDON: State for auth/migration modal
+    const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
+    const [hasCheckedMigration, setHasCheckedMigration] = useState(false);
+    //
+
     const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
     const journalEntryCount = Object.keys(allEntries).length;
     const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
@@ -270,6 +277,7 @@ export default function JournalPage() {
         if (isLoading || !user) return; // Wait for loading to finish and user to be present
 
         if (isPro) { // Premium User
+            console.log("User is Pro, fetching from Supabase...");
             const { data, error } = await supabase
                 .from('journal_entries')
                 .select('*')
@@ -280,7 +288,8 @@ export default function JournalPage() {
                 setAllEntries({});
             } else {
                 const entriesMap = data.reduce((acc, entry) => {
-                    const date = new Date(entry.date + 'T12:00:00Z');
+                    // Handle potential timestamp with timezone
+                    const date = new Date(entry.date.includes('T') ? entry.date : entry.date + 'T12:00:00Z');
                     const key = getDateKey(date);
                     acc[key] = entry;
                     return acc;
@@ -288,12 +297,14 @@ export default function JournalPage() {
                 setAllEntries(entriesMap);
             }
         } else { // Free Tier User
+            console.log("User is Free, fetching from Local Storage...");
             setAllEntries(getLocalJournals());
         }
     }, [user, isPro, isLoading, supabase]);
 
 
     const fetchDailyStats = useCallback(async () => {
+        // This function logic remains the same
         const { data: { user } } = await supabase.auth.getUser();
         const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
@@ -325,7 +336,7 @@ export default function JournalPage() {
             tasks: { percentage: tasksWorkedOnToday > 0 ? (tasksCompletedToday / tasksWorkedOnToday) * 100 : 0, value: `${tasksCompletedToday}/${tasksWorkedOnToday}` },
             sessions: { percentage: pomodorosEstimated > 0 ? (pomodorosCompleted / pomodorosEstimated) * 100 : 0, value: `${pomodorosCompleted}/${pomodorosEstimated}` },
         });
-    }, []);
+    }, [supabase]); // Made supabase a dependency
 
     useEffect(() => {
         const initialize = () => {
@@ -344,6 +355,61 @@ export default function JournalPage() {
     useEffect(() => {
         fetchJournalEntries();
     }, [fetchJournalEntries]); // Re-fetch when user/pro status changes
+
+    // --- ADDON: Data Migration Effect ---
+    useEffect(() => {
+        if (isPro && user && !isLoading && !hasCheckedMigration) {
+            console.log("Checking for local data to migrate...");
+            setHasCheckedMigration(true); // Only run this check once
+
+            const localJournals = getLocalJournals();
+            const localEntries = Object.entries(localJournals);
+
+            if (localEntries.length > 0) {
+                console.log(`Found ${localEntries.length} local entries. Migrating to Supabase...`);
+
+                const formattedEntries = localEntries.map(([dateKey, entry]) => {
+                    const [year, month, day] = dateKey.split('-').map(Number);
+                    const isoDate = new Date(year, month - 1, day).toISOString().split('T')[0];
+                    return {
+                        user_id: user.id,
+                        date: isoDate,
+                        title: entry.title,
+                        content: entry.content,
+                    };
+                });
+
+                const migrateData = async () => {
+                    try {
+                        // Upsert to prevent duplicates if user downgraded and re-upgraded
+                        const { error } = await supabase
+                            .from('journal_entries')
+                            .upsert(formattedEntries, { onConflict: 'user_id, date' });
+
+                        if (error) {
+                            throw error;
+                        }
+
+                        console.log("Migration successful!");
+                        localStorage.removeItem('ws_journal_entries'); // Clear local data
+                        // (Optional: show a success modal)
+
+                        // Refetch entries from Supabase to update the UI
+                        fetchJournalEntries();
+
+                    } catch (error) {
+                        console.error("Error migrating local journal entries:", error);
+                        // (Optional: show an error modal)
+                    }
+                };
+                migrateData();
+            } else {
+                console.log("No local journal entries found to migrate.");
+            }
+        }
+    }, [isPro, user, isLoading, hasCheckedMigration, supabase, fetchJournalEntries]);
+    // --- End of Data Migration Effect ---
+
 
     useEffect(() => {
         const dateKey = getDateKey(selectedDate);
@@ -381,6 +447,8 @@ export default function JournalPage() {
         const dateKey = getDateKey(selectedDate);
         const isNewEntry = !allEntries[dateKey];
         if (isFreeTierLimitReached && isNewEntry) {
+            // This now just prevents saving, the UI is handled by `isSavingDisabled`
+            console.warn("Journal limit reached. Upgrade to save new entries.");
             return;
         }
 
@@ -418,69 +486,71 @@ export default function JournalPage() {
     const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
     const isPastDate = checkDate < today;
 
+    // ADDON: Handle auth modal for free users
+    const handleEditorClick = () => {
+        if (!isPro && !isLoading) {
+            setIsSignUpModalOpen(true);
+        }
+    };
+
+    // MODIFIED: Show modal on editor focus *only if free user*
+    const editorWrapperProps = !isPro ? { onClick: handleEditorClick } : {};
+
+
     // Loading state for initial auth/sub check
     if (isLoading) {
         return <div className="min-h-screen w-full bg-gray-950 flex items-center justify-center text-white">Loading your journal...</div>;
     }
+
+    // This shouldn't be reached if the redirect works, but as a fallback.
+    if (!user) {
+        return <div className="min-h-screen w-full bg-gray-950 flex items-center justify-center text-white">Redirecting...</div>;
+    }
+
+    // Check if motion reduction is enabled
+    const reducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
     // Render the journal page
     return (
         <div className="min-h-screen w-full bg-gradient-to-br from-gray-900 to-gray-950 text-gray-100 font-sans">
             <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} />
             <style jsx global>{`
-                                /* ... animations ... *
-
+                /* ... animations ... */
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
                 @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-
                 @keyframes fadeInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
 
                 .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
-
                 .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
-
                 .animate-fade-in-left { animation: fadeInLeft 0.6s ease-out forwards; }
-
                 .animate-fade-in-right { animation: fadeInRight 0.6s ease-out forwards; }
+
+                ${reducedMotion ? `
+                .animate-fade-in, .animate-fade-in-up, .animate-fade-in-left, .animate-fade-in-right {
+                    animation-duration: 0.01ms !important;
+                }
+                ` : ''}
 
                 [contenteditable]:focus { outline: none; }
 
                 .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-
                 .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 10px; }
-
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
-
                 .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
 
-                .reduce-motion * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
-
                 /* --- STYLING FIXES --- */
-
                 .prose p {
-
-                font-size: 1rem;
-
-                line-height: 1.7; /* Increased for readability */
-
-                margin-top: 0.25em;
-
-                margin-bottom: 0.25em;
-
+                    font-size: 1rem;
+                    line-height: 1.7; /* Increased for readability */
+                    margin-top: 0.25em;
+                    margin-bottom: 0.25em;
                 }
-
-                .prose p { font-size: 1rem; line-height: 1.7; margin-top: 0.25em; margin-bottom: 0.25em; }
-
                 .prose h1 { font-size: 1.875rem; margin-bottom: 0.75rem; margin-top: 1.5rem; }
-
                 .prose h2 { font-size: 1.5rem; margin-bottom: 0.75rem; margin-top: 1.25rem; }
-
                 .prose ul, .prose ol { padding-left: 1.75rem; margin-top: 0.5em; margin-bottom: 0.5em; }
            `}</style>
-            <div className={`flex flex-col py-4 px-4 sm:px-8 md:px-12 lg:px-16 gap-5 ${reducedMotion ? 'reduce-motion' : ''}`}>
+            <div className="flex flex-col py-4 px-4 sm:px-8 md:px-12 lg:px-16 gap-5">
                 <header className="flex-shrink-0 h-48 lg:h-56 relative flex justify-center items-center rounded-2xl overflow-hidden shadow-xl">
                     <div className="absolute inset-0 bg-gradient-to-r from-purple-900/70 via-blue-900/50 to-indigo-900/70 z-0"></div>
                     <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-gray-900/80 to-gray-950 z-10"></div>
@@ -524,16 +594,19 @@ export default function JournalPage() {
                         )}
                     </aside>
 
-                    <JournalEditor
-                        entry={entry}
-                        onEntryChange={handleEntryChange}
-                        dailyStats={dailyStats}
-                        isPastDate={isPastDate}
-                        isEditMode={isEditMode}
-                        setIsEditMode={setIsEditMode}
-                        isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
-                        entryCount={journalEntryCount}
-                    />
+                    {/* MODIFIED: Added wrapper div with click handler */}
+                    <div {...editorWrapperProps} className="flex-grow">
+                        <JournalEditor
+                            entry={entry}
+                            onEntryChange={handleEntryChange}
+                            dailyStats={dailyStats}
+                            isPastDate={isPastDate}
+                            isEditMode={isEditMode}
+                            setIsEditMode={setIsEditMode}
+                            isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
+                            entryCount={journalEntryCount}
+                        />
+                    </div>
                 </main>
             </div>
         </div>
