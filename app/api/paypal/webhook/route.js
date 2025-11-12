@@ -6,13 +6,8 @@ import { createClient } from '@supabase/supabase-js';
 // This API route MUST run on the Node.js runtime for webhook verification
 export const runtime = 'nodejs';
 
-// Initialize a *server-side* Supabase client using the Service Role Key
-// This is secure because this code only runs on your server, not in the browser
-// This client has admin rights and can bypass RLS to update your subscriptions.
-const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+// DO NOT initialize the client here. This causes the build error.
+// BAD: const supabase = createClient(...)
 
 export async function POST(request) {
     console.log("--- PayPal Webhook Received ---");
@@ -26,6 +21,13 @@ export async function POST(request) {
     console.log(`PAYPAL_WEBHOOK_ID: ${process.env.PAYPAL_WEBHOOK_ID ? 'FOUND' : '!!! MISSING !!!'}`);
     console.log(`SUPABASE_SERVICE_ROLE_KEY: ${process.env.SUPABASE_SERVICE_ROLE_KEY ? 'FOUND' : '!!! MISSING !!!'}`);
     // --- END DEBUG LOGS ---
+
+    // --- FIX: Initialize the client *inside* the POST function ---
+    // This ensures it only runs at runtime, not build time.
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL,
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
 
     try {
         // 1. Verify the webhook signature
