@@ -11,6 +11,7 @@ export async function middleware(req) {
     return response;
 }
 
+
 export const config = {
     matcher: [
         /*
@@ -22,3 +23,5 @@ export const config = {
         '/((?!_next/static|_next/image|favicon.ico).*)',
     ],
 };
+
+export const runtime = 'nodejs';
