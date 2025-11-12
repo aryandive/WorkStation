@@ -1,0 +1,26 @@
+{
+    "builds": [
+        {
+            "src": "next.config.mjs",
+            "use": "@vercel/next"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/paypal/webhook",
+            "dest": "/api/paypal/webhook",
+            "methods": [
+                "POST"
+            ],
+            "headers": {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "POST",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Paypal-Auth-Algo, Paypal-Cert-Url, Paypal-Transmission-Id, Paypal-Transmission-Sig, Paypal-Transmission-Time"
+            }
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/"
+        }
+    ]
+}
