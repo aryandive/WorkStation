@@ -1,17 +1,14 @@
-// app/api/paypal/webhook/route.js
-
+// for gemini copy/app/api/paypal/webhook/route.js
 export const runtime = 'nodejs';
 
 import { NextResponse } from 'next/server';
 import { verifyPayPalWebhook } from '@/lib/paypal';
-import { createClient } from '@supabase/supabase-js'; // Use the standard client for background tasks
+import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase client (using service role key for admin tasks is safer for webhooks)
-// For now, we'll use anon key, but for production, use the SERVICE_ROLE_KEY
+// Initialize Supabase client
 const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    // In production, use: process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
 // We need the raw body for webhook verification
@@ -22,23 +19,34 @@ export const config = {
 };
 
 export async function POST(request) {
+    console.log("--- PayPal Webhook Received ---");
+
+    // --- START DEBUG LOGS ---
+    console.log("Checking Env Vars...");
+    console.log(`NEXT_PUBLIC_PAYPAL_CLIENT_ID: ${process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ? 'FOUND' : '!!! MISSING !!!'}`);
+    console.log(`PAYPAL_CLIENT_SECRET: ${process.env.PAYPAL_CLIENT_SECRET ? 'FOUND' : '!!! MISSING !!!'}`);
+    console.log(`PAYPAL_WEBHOOK_ID: ${process.env.PAYPAL_WEBHOOK_ID ? 'FOUND' : '!!! MISSING !!!'}`);
+    // --- END DEBUG LOGS ---
+
     const rawBody = await request.text();
     const headers = request.headers;
 
     try {
-        // 1. Verify the webhook signature
+        console.log("Attempting to verify webhook signature...");
         const isVerified = await verifyPayPalWebhook(headers, rawBody);
+
         if (!isVerified) {
-            console.warn('Invalid PayPal webhook signature received.');
-            return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+            console.warn('!!! Webhook verification FAILED. Check CLIENT_ID, CLIENT_SECRET, and WEBHOOK_ID. !!!');
+            // The 401 is coming from getPayPalAccessToken() inside verifyPayPalWebhook
+            return NextResponse.json({ error: 'Invalid signature' }, { status: 401 });
         }
 
-        // 2. Parse the event
+        console.log("Webhook signature VERIFIED.");
         const event = JSON.parse(rawBody);
         const eventType = event.event_type;
         const resource = event.resource;
 
-        console.log(`Received PayPal Webhook: ${eventType}`);
+        console.log(`Received PayPal Event: ${eventType}`);
 
         // 3. Handle the event
         switch (eventType) {
@@ -115,7 +123,8 @@ export async function POST(request) {
         return NextResponse.json({ received: true }, { status: 200 });
 
     } catch (error) {
-        console.error('Error processing PayPal webhook:', error.message);
+        console.error('!!! Top-level error in PayPal webhook handler: !!!', error.message);
+        // This catches errors from verifyPayPalWebhook, which is where the 401 is
         return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
     }
-}
+} 
