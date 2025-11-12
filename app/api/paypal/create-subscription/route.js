@@ -1,4 +1,6 @@
 // app/api/paypal/create-subscription/route.js
+export const runtime = 'nodejs';
+
 import { NextResponse } from 'next/server';
 import { createPayPalSubscription } from '@/lib/paypal';
 import { createClient } from '@/utils/supabase/server'; // Use server client

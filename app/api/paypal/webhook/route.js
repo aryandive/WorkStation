@@ -1,4 +1,7 @@
 // app/api/paypal/webhook/route.js
+
+export const runtime = 'nodejs';
+
 import { NextResponse } from 'next/server';
 import { verifyPayPalWebhook } from '@/lib/paypal';
 import { createClient } from '@supabase/supabase-js'; // Use the standard client for background tasks
