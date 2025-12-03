@@ -1,6 +1,9 @@
+// components/Header.js
+'use client'; // Needs to be client side to render AuthButton correctly
+
 import Link from 'next/link';
 import Image from 'next/image';
-import { Button } from '@/components/ui/button';
+import AuthButton from '@/components/AuthButton'; // Use the AuthButton that handles login state
 
 export default function Header() {
     return (
@@ -13,9 +16,8 @@ export default function Header() {
                 <Link href="/pricing" className="text-sm font-medium text-gray-300 hover:text-white transition-colors">
                     Pricing
                 </Link>
-                <Button asChild>
-                    <Link href="/login">Sign In</Link>
-                </Button>
+                {/* Replaced static button with dynamic AuthButton */}
+                <AuthButton />
             </div>
         </header>
     );

@@ -1,112 +1,90 @@
-// app/api/paypal/webhook/route.js - FINAL DEBUG VERSION
+// app/api/paypal/webhook/route.js - LOCAL DEVELOPMENT VERSION
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 export const runtime = 'nodejs';
 
 export async function POST(request) {
-    console.log("🎯 === PAYPAL WEBHOOK DEBUG - START ===");
+    console.log('🔄 --- LOCALHOST WEBHOOK RECEIVED --- 🔄');
+
+    // WARNING: We are skipping signature verification for local testing.
+    console.warn('!!! WARNING: Webhook signature verification is SKIPPED. DO NOT use this code in production. !!!');
 
     const rawBody = await request.text();
-    const headers = Object.fromEntries(request.headers.entries());
+    const body = JSON.parse(rawBody);
 
-    // Log EVERYTHING
-    console.log("📨 Headers received:", JSON.stringify(headers, null, 2));
-    console.log("📝 Raw body received:", rawBody);
+    console.log('📨 Event Type:', body.event_type);
 
-    // FORCE SUCCESS RESPONSE - No verification at all
-    console.log("✅ SKIPPING ALL VERIFICATION - RETURNING 200");
+    // Log the important bits
+    if (body.resource) {
+        console.log('---');
+        console.log('  Resource ID:', body.resource.id);
+        console.log('  CUSTOM_ID (USER_ID):', body.resource.custom_id);
+        console.log('  PLAN_ID:', body.resource.plan_id);
+        console.log('  Status:', body.resource.status);
+        console.log('---');
+    }
 
+    // Use the Service Role Key to bypass RLS
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
-        process.env.SUPABASE_SERVICE_ROLE_KEY
+        process.env.SUPABASE_SERVICE_ROLE_KEY // Use the secure service key
     );
 
     try {
-        const event = JSON.parse(rawBody);
-        const eventType = event.event_type;
-        const resource = event.resource;
-
-        console.log(`🔔 Event Type: ${eventType}`);
-        console.log("📊 Full Event Structure:", JSON.stringify(event, null, 2));
-
-        // Search for custom_id in EVERY possible location
-        console.log("🔍 Searching for custom_id...");
-        const customId =
-            resource?.custom_id ||
-            event?.resource?.custom_id ||
-            resource?.subscriber?.custom_id ||
-            event?.resource?.subscriber?.custom_id;
-
-        console.log(`👤 Custom ID found: ${customId || 'NOT FOUND'}`);
-        console.log("🔎 Resource details:", JSON.stringify(resource, null, 2));
-
-        if (eventType === 'BILLING.SUBSCRIPTION.ACTIVATED') {
-            console.log("💰 Processing subscription activation...");
-
-            const subscriptionId = resource.id;
+        if (body.event_type === 'BILLING.SUBSCRIPTION.ACTIVATED') {
+            const resource = body.resource;
+            const userId = resource.custom_id;
             const planId = resource.plan_id;
-            const status = resource.status;
 
-            console.log(`📋 Subscription Details:
-            - ID: ${subscriptionId}
-            - Plan: ${planId}
-            - Status: ${status}
-            - Custom ID: ${customId}`);
+            if (!userId) {
+                console.error('❌ ERROR: No custom_id (user_id) found in webhook body.');
+                return NextResponse.json({ error: 'No custom_id found' }, { status: 400 });
+            }
 
-            if (customId) {
-                console.log("✅ Found user ID, processing...");
+            let tier = null;
+            if (planId === process.env.NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID) {
+                tier = 'pro_monthly';
+            } else if (planId === process.env.NEXT_PUBLIC_PAYPAL_YEARLY_PLAN_ID) {
+                tier = 'pro_yearly';
+            }
 
-                // Determine tier
-                let tier = 'unknown';
-                if (planId === process.env.PAYPAL_MONTHLY_PLAN_ID) {
-                    tier = 'pro_monthly';
-                } else if (planId === process.env.PAYPAL_YEARLY_PLAN_ID) {
-                    tier = 'pro_yearly';
-                }
+            if (!tier) {
+                console.error(`❌ ERROR: Unknown planId ${planId}`);
+                return NextResponse.json({ error: 'Unknown planId' }, { status: 400 });
+            }
 
-                console.log(`🏷️ Determined tier: ${tier}`);
+            console.log(`✅ PROCESSING: User ${userId}, Tier ${tier}`);
 
-                // Update database
-                const { error: dbError } = await supabase
-                    .from('subscriptions')
-                    .upsert({
-                        user_id: customId,
-                        status: status.toLowerCase(),
-                        tier: tier,
-                        paypal_subscription_id: subscriptionId,
-                        paypal_plan_id: planId,
-                    }, { onConflict: 'user_id' });
+            const { error } = await supabase
+                .from('subscriptions')
+                .upsert({
+                    user_id: userId,
+                    status: resource.status.toLowerCase(),
+                    tier: tier,
+                    paypal_subscription_id: resource.id,
+                    paypal_plan_id: planId,
+                }, { onConflict: 'user_id' });
 
-                if (dbError) {
-                    console.error('❌ Database error:', dbError);
-                } else {
-                    console.log(`🎉 Success! User ${customId} upgraded to ${tier}`);
-                }
+            if (error) {
+                console.error('❌ SUPABASE ERROR:', error);
             } else {
-                console.error('❌ No custom_id found in webhook!');
-                console.log('📋 Full resource for debugging:', JSON.stringify(resource, null, 2));
+                console.log('✅ DATABASE SUCCESS: User subscription updated!');
             }
         }
 
-        console.log("🏁 === WEBHOOK PROCESSING COMPLETE ===");
-
-        // ALWAYS return 200 - no matter what
-        return NextResponse.json({
-            success: true,
-            debug: true,
-            message: "Webhook received and processed",
-            custom_id_found: !!customId,
-            event_type: eventType
-        });
+        return NextResponse.json({ received: true });
 
     } catch (error) {
         console.error('💥 UNHANDLED ERROR:', error);
-        // STILL return 200 even on error
-        return NextResponse.json({
-            success: true,
-            debug: true,
-            error: error.message
-        });
+        return NextResponse.json({ error: error.message }, { status: 500 });
     }
+}
+
+
+// ADD THIS NEW FUNCTION:
+
+export async function GET() {
+
+    return NextResponse.json({ status: 'Webhook endpoint is active' }, { status: 200 });
 }

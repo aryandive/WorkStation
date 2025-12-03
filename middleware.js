@@ -3,14 +3,9 @@ import { NextResponse } from 'next/server';
 
 export async function middleware(req) {
     const { supabase, response } = createClient(req);
-
-    // Refresh session if expired - required for Server Components
-    // https://supabase.com/docs/guides/auth/auth-helpers/nextjs#managing-session-with-middleware
     await supabase.auth.getSession();
-
     return response;
 }
-
 
 export const config = {
     matcher: [
