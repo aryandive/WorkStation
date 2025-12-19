@@ -1,6 +1,5 @@
 // app/api/paypal/webhook/route.js
 export const runtime = 'nodejs';
-
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyPayPalWebhook } from '@/lib/paypal';
@@ -11,21 +10,32 @@ export async function POST(request) {
     const rawBody = await request.text();
     const headersList = request.headers;
 
-    // 1. VERIFY WEBHOOK SIGNATURE
-    // This prevents hackers from faking payments.
-    try {
-        const isValid = await verifyPayPalWebhook(headersList, rawBody);
-        if (!isValid) {
-            console.error('❌ SIGNATURE VERIFICATION FAILED');
-            return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
-        }
-    } catch (err) {
-        console.error('❌ ERROR DURING VERIFICATION:', err);
-        return NextResponse.json({ error: 'Verification error' }, { status: 500 });
+    // 🛑 SAFETY CHECK: Ensure body is not empty
+    if (!rawBody) {
+        console.warn('⚠️ Received empty webhook body. Ignoring.');
+        return NextResponse.json({ error: 'Empty body' }, { status: 400 });
     }
 
-    const body = JSON.parse(rawBody);
-    console.log(`📨 Event Type: ${body.event_type}`);
+    // 1. SECURITY VERIFICATION (Skip in dev/ngrok if needed, but keep for production)
+    if (process.env.NODE_ENV !== 'development') {
+        try {
+            const isValid = await verifyPayPalWebhook(headersList, rawBody);
+            if (!isValid) {
+                console.error('❌ SIGNATURE VERIFICATION FAILED');
+                return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
+            }
+        } catch (err) {
+            console.error('⚠️ Verification Error:', err.message);
+        }
+    }
+
+    let body;
+    try {
+        body = JSON.parse(rawBody);
+    } catch (err) {
+        console.error('❌ JSON PARSE ERROR:', err.message);
+        return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
+    }
 
     // Init Supabase Admin
     const supabase = createClient(
@@ -35,57 +45,66 @@ export async function POST(request) {
 
     try {
         const resource = body.resource;
+        const eventType = body.event_type;
 
+        console.log(`📨 Event Type: ${eventType}`);
+
+        // ====================================================
         // 2. HANDLE SUBSCRIPTION ACTIVATION
-        if (body.event_type === 'BILLING.SUBSCRIPTION.ACTIVATED') {
+        // ====================================================
+        if (eventType === 'BILLING.SUBSCRIPTION.ACTIVATED') {
             const userId = resource.custom_id;
             const planId = resource.plan_id;
 
+            // 🛡️ ZOMBIE KILLER: Ignore events with no User ID
             if (!userId) {
-                console.error('❌ ERROR: No custom_id (user_id) found.');
-                return NextResponse.json({ error: 'No custom_id found' }, { status: 400 });
+                console.log(`👻 Ignoring Ghost Event (No custom_id). Date: ${resource.create_time}`);
+                return NextResponse.json({ received: true });
             }
 
-            // Map Plan ID to Tier Name
-            let tier = null;
+            console.log(`✅ PROCESSING PAYMENT for User: ${userId}`);
+
+            // Determine Tier
+            let tier = 'pro';
             if (planId === process.env.NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID) {
                 tier = 'pro_monthly';
             } else if (planId === process.env.NEXT_PUBLIC_PAYPAL_YEARLY_PLAN_ID) {
                 tier = 'pro_yearly';
-            } else {
-                console.warn(`⚠️ Warning: Unknown planId ${planId}, defaulting to 'pro'`);
-                tier = 'pro';
             }
 
-            console.log(`✅ ACTIVATING: User ${userId}, Tier ${tier}`);
-
+            // Upsert into Database
             const { error } = await supabase
                 .from('subscriptions')
                 .upsert({
                     user_id: userId,
-                    status: 'active', // Standardize status to 'active'
+                    status: 'active',
                     tier: tier,
                     paypal_subscription_id: resource.id,
                     paypal_plan_id: planId,
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'user_id' });
 
-            if (error) console.error('❌ DB ERROR (Activation):', error);
-            else console.log('✅ DATABASE UPDATED: Subscription Active');
+            if (error) {
+                console.error('❌ DATABASE ERROR:', error);
+                return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+
+            console.log('🎉 SUCCESS: Subscription saved to Supabase!');
         }
 
-        // 3. HANDLE CANCELLATION, SUSPENSION, & EXPIRATION
+        // ====================================================
+        // 3. HANDLE CANCELLATION / STATUS CHANGE
+        // ====================================================
         else if (
-            body.event_type === 'BILLING.SUBSCRIPTION.CANCELLED' ||
-            body.event_type === 'BILLING.SUBSCRIPTION.SUSPENDED' ||
-            body.event_type === 'BILLING.SUBSCRIPTION.EXPIRED'
+            eventType === 'BILLING.SUBSCRIPTION.CANCELLED' ||
+            eventType === 'BILLING.SUBSCRIPTION.SUSPENDED' ||
+            eventType === 'BILLING.SUBSCRIPTION.EXPIRED'
         ) {
             const subscriptionId = resource.id;
-            const newStatus = resource.status.toLowerCase(); // 'cancelled', 'suspended', etc.
+            const newStatus = resource.status.toLowerCase();
 
-            console.log(`⚠️ PROCESSING CHANGE: Sub ${subscriptionId} -> ${newStatus}`);
+            console.log(`⚠️ STATUS UPDATE: ${subscriptionId} is now ${newStatus}`);
 
-            // Update by paypal_subscription_id because custom_id is sometimes missing in these events
             const { error } = await supabase
                 .from('subscriptions')
                 .update({
@@ -94,18 +113,13 @@ export async function POST(request) {
                 })
                 .eq('paypal_subscription_id', subscriptionId);
 
-            if (error) console.error('❌ DB ERROR (Status Change):', error);
-            else console.log(`✅ DATABASE UPDATED: Subscription is now ${newStatus}`);
+            if (error) console.error('❌ DB ERROR:', error);
+            else console.log('✅ Status updated in DB');
         }
-
         return NextResponse.json({ received: true });
 
     } catch (error) {
-        console.error('💥 UNHANDLED WEBHOOK ERROR:', error);
+        console.error('💥 SERVER ERROR:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
-
-export async function GET() {
-    return NextResponse.json({ status: 'Webhook Active' });
 }

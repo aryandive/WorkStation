@@ -27,7 +27,7 @@ export function SubscriptionProvider({ children }) {
                 .select('status, tier')
                 .eq('user_id', user.id)
                 .in('status', ['trialing', 'active'])
-                .single();
+                .maybeSingle();
 
             if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is fine
                 console.error('Error fetching subscription:', error);

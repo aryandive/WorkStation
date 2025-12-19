@@ -26,7 +26,7 @@ export default function PayPalSubscriptionButton({ planId, user }) {
                     // --- DEBUGGING START ---
                     console.log("🟢 Attempting to Create Subscription");
                     console.log("👉 Plan ID being sent:", planId);
-//                    console.log("👉 User ID being sent:", user?.id);
+                    console.log("👉 User ID being sent:", user?.id);
 
                     if (!planId) {
                         console.error("🔴 ERROR: Plan ID is missing! Aborting.");
@@ -37,12 +37,13 @@ export default function PayPalSubscriptionButton({ planId, user }) {
 
                     return actions.subscription.create({
                         plan_id: planId,
-                        // We removed custom_id temporarily to rule it out as a cause
+                        custom_id: user?.id,
                     });
                 }}
                 onApprove={(data, actions) => {
                     console.log('Subscription successful:', data);
-                    alert('Subscription Active! ID: ' + data.subscriptionID);
+                    // alert('Subscription Active! ID: ' + data.subscriptionID);
+                    window.location.href = '/journal?upgraded=true';
                 }}
             />
         </div>
