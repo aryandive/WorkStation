@@ -16,7 +16,16 @@ const nextConfig = {
             }
         ],
     },
+    experimental: {
+        // "allowedDevOrigins" is often flagged as invalid. 
+        // We use "serverActions.allowedOrigins" instead, which solves the Ngrok host issue.
+        serverActions: {
+            allowedOrigins: [
+                'localhost:3000',
+                'expostulatory-jeanine-vaccinial.ngrok-free.dev', // Your Ngrok domain
+            ],
+        },
+    },
 };
 
 export default nextConfig;
-

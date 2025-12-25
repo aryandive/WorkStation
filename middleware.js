@@ -3,11 +3,7 @@ import { NextResponse } from 'next/server';
 
 export async function middleware(req) {
     const { supabase, response } = createClient(req);
-
-    // Refresh session if expired - required for Server Components
-    // https://supabase.com/docs/guides/auth/auth-helpers/nextjs#managing-session-with-middleware
     await supabase.auth.getSession();
-
     return response;
 }
 
@@ -18,7 +14,10 @@ export const config = {
          * - _next/static (static files)
          * - _next/image (image optimization files)
          * - favicon.ico (favicon file)
+         * - api/paypal/webhook (OUR PUBLIC WEBHOOK)
          */
-        '/((?!_next/static|_next/image|favicon.ico).*)',
+        '/((?!_next/static|_next/image|favicon.ico|api/paypal/webhook).*)',
     ],
 };
+
+export const runtime = 'nodejs';
