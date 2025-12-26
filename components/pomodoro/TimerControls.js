@@ -1,12 +1,12 @@
 import { Play, Pause, RefreshCw, SkipForward, Maximize2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useCallback, useRef, useEffect } from 'react'; // <-- Correctly import useEffect
+import { useCallback, useRef, useEffect } from 'react';
 
-// --- Sound Player Hook ---
+// --- Improved Sound Player Hook ---
+// Fixes "AbortError" by using cloned nodes for overlapping playback
 const useSoundPlayer = () => {
     const audioRef = useRef(null);
 
-    // Initialize the audio element on the client-side
     useEffect(() => {
         if (typeof window !== 'undefined') {
             audioRef.current = new Audio();
@@ -15,14 +15,20 @@ const useSoundPlayer = () => {
 
     const playSound = useCallback((soundFile) => {
         if (audioRef.current) {
-            audioRef.current.src = soundFile;
-            audioRef.current.play().catch(err => console.error("Sound play failed:", err));
+            // Clone the node to allow overlapping sounds (rapid clicking)
+            // This prevents "AbortError" when play() is called while already playing
+            const tempAudio = audioRef.current.cloneNode();
+            tempAudio.src = soundFile;
+            tempAudio.volume = 0.5; // Reasonable default volume for UI clicks
+            tempAudio.play().catch(err => {
+                // Ignore "user didn't interact" errors or load errors
+                console.warn("Sound play failed:", err);
+            });
         }
     }, []);
 
     return playSound;
 };
-
 
 export default function TimerControls({ isRunning, startTimer, pauseTimer, resetTimer, skipMode, isMinimized = false, maximize }) {
     const playClickSound = useSoundPlayer();
@@ -82,4 +88,3 @@ export default function TimerControls({ isRunning, startTimer, pauseTimer, reset
         </div>
     );
 }
-
