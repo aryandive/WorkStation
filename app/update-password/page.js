@@ -1,4 +1,3 @@
-// app/update-password/page.js
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { Button } from '@/components/ui/button';
