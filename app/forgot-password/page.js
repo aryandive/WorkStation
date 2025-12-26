@@ -1,4 +1,3 @@
-// app/forgot-password/page.js
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
 import { headers } from 'next/headers';
@@ -15,16 +14,27 @@ export default async function ForgotPassword({ searchParams }) {
         const email = formData.get('email');
         const supabase = await createClient();
 
-        // Dynamic origin logic (same as login)
+        // Dynamic origin logic (reusing your robust logic from login)
         const headerStore = await headers();
-        const origin = process.env.NEXT_PUBLIC_SITE_URL
-            || (headerStore.get('x-forwarded-host') ? `https://${headerStore.get('x-forwarded-host')}` : null)
-            || (headerStore.get('host') ? `http://${headerStore.get('host')}` : 'http://localhost:3000');
+        const forwardedHost = headerStore.get('x-forwarded-host');
+        const isLocalEnv = process.env.NODE_ENV === 'development';
+
+        let origin = process.env.NEXT_PUBLIC_SITE_URL;
+
+        if (forwardedHost) {
+            origin = `https://${forwardedHost}`;
+        } else if (!origin) {
+            const host = headerStore.get('host');
+            origin = isLocalEnv ? `http://${host}` : `https://${host}`;
+        }
+
+        // Remove trailing slash if present
+        const baseUrl = origin?.replace(/\/$/, '');
 
         const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            // Important: We redirect them to the callback, but with a 'next' param
+            // Crucial: We redirect them to the callback, but with a 'next' param
             // that points to the update-password page.
-            redirectTo: `${origin}/auth/callback?next=/update-password`,
+            redirectTo: `${baseUrl}/auth/callback?next=/update-password`,
         });
 
         if (error) {
