@@ -30,14 +30,26 @@ export default async function LoginPage({ searchParams }) {
     const signInWithGoogle = async () => {
         'use server';
         const supabase = await createClient();
-        const hdrs = await headers();
-        const headerOrigin = hdrs.get('origin');
-        const fallbackOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-        const origin = headerOrigin || fallbackOrigin;
+
+        // 1. Get headers to determine the correct origin
+        const headerStore = await headers();
+
+        // 2. Logic to determine the correct Redirect URI
+        // Priority:
+        // A. process.env.NEXT_PUBLIC_SITE_URL (If you have a hardcoded prod URL)
+        // B. 'x-forwarded-host' (Crucial for Ngrok & Vercel) -> needs https:// prepended
+        // C. 'host' (Fallback for local dev without proxies) -> needs http:// prepended
+        const origin = process.env.NEXT_PUBLIC_SITE_URL
+            || (headerStore.get('x-forwarded-host') ? `https://${headerStore.get('x-forwarded-host')}` : null)
+            || (headerStore.get('host') ? `http://${headerStore.get('host')}` : 'http://localhost:3000');
 
         const { data, error } = await supabase.auth.signInWithOAuth({
             provider: 'google',
             options: {
+                queryParams: {
+                    access_type: 'offline',
+                    prompt: 'consent',
+                },
                 redirectTo: `${origin}/auth/callback`,
             },
         });
@@ -103,6 +115,12 @@ export default async function LoginPage({ searchParams }) {
                         <Link href="/signup" className="text-yellow-400 hover:underline">
                             Don&apos;t have an account? Sign up
                         </Link>
+                        {/* Added Forgot Password Link for Part 2 preparation */}
+                        <div className="mt-2">
+                            <Link href="/forgot-password" className="text-xs text-gray-400 hover:text-white hover:underline">
+                                Forgot password?
+                            </Link>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
