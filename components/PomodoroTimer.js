@@ -2,33 +2,31 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import usePomodoroTimer from '@/hooks/usePomodoroTimer';
+import { useSessionLogger } from '@/hooks/useSessionLogger'; // IMPORT THE NEW HOOK
 import SessionSettings from '@/components/pomodoro/SessionSettings';
 import ProgressCircle from '@/components/pomodoro/ProgressCircle';
 import TimerControls from '@/components/pomodoro/TimerControls';
 import { createClient } from '@/utils/supabase/client';
-import { LinkIcon, Settings, X } from 'lucide-react'; // Removed unused icons
+import { LinkIcon, Settings, X } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
-// --- Local Sound Helper (Fixes AbortError & Missing Sounds) ---
+// --- Local Sound Helper ---
 const useKeyboardSound = () => {
     const audioRef = useRef(null);
-
     useEffect(() => {
         if (typeof window !== 'undefined') {
             audioRef.current = new Audio();
         }
     }, []);
-
     return (src) => {
         if (audioRef.current) {
-            // Clone node to allow rapid playback without "AbortError"
             const sound = audioRef.current.cloneNode();
             sound.src = src;
             sound.volume = 0.5;
-            sound.play().catch(() => { }); // Ignore interaction errors
+            sound.play().catch(() => { });
         }
     };
 };
@@ -38,26 +36,44 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     const [linkedTask, setLinkedTask] = useState(null);
     const [isMinimized, setIsMinimized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const supabase = createClient();
 
-    // Initialize sound player
+    const supabase = createClient();
     const playSound = useKeyboardSound();
+
+    // INITIALIZE THE LOGGER
+    const { saveSession } = useSessionLogger();
 
     const linkedTaskRef = useRef(linkedTask);
     useEffect(() => {
         linkedTaskRef.current = linkedTask;
     }, [linkedTask]);
 
-    const handleSessionComplete = useCallback(({ sessionWasWork }) => {
-        if (sessionWasWork && linkedTaskRef.current && onTaskTimeUpdateRef && typeof onTaskTimeUpdateRef.current === 'function') {
-            onTaskTimeUpdateRef.current(linkedTaskRef.current.id, 1);
+    // --- UPDATED COMPLETION HANDLER ---
+    const handleSessionComplete = useCallback(({ sessionWasWork, duration }) => {
+        // Only log if it was a work session and had actual duration
+        if (sessionWasWork && duration > 0) {
+
+            // 1. Save the detailed session data (Cloud or Local)
+            saveSession({
+                duration,
+                taskId: linkedTaskRef.current ? linkedTaskRef.current.id : null
+            });
+
+            // 2. Update visual progress on the task (Legacy behavior)
+            if (linkedTaskRef.current && onTaskTimeUpdateRef && typeof onTaskTimeUpdateRef.current === 'function') {
+                // Optional: Only increment "Pomodoro Count" if duration was significant (e.g. > 20 mins)
+                // or just increment by 1 for every finish.
+                onTaskTimeUpdateRef.current(linkedTaskRef.current.id, 1);
+            }
         }
-    }, [onTaskTimeUpdateRef]);
+    }, [onTaskTimeUpdateRef, saveSession]);
 
     const {
         timeLeft, isRunning, mode, progress, settings,
         startTimer, pauseTimer, resetTimer, skipMode, updateSettings, setMode,
     } = usePomodoroTimer({ onSessionComplete: handleSessionComplete });
+
+    // ... (Rest of your UI code remains exactly the same) ...
 
     const colorMap = {
         work: { button: 'bg-yellow-500/80 text-white hover:bg-yellow-600/80', progress: 'text-yellow-500' },
@@ -65,59 +81,33 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         longBreak: { button: 'bg-blue-500/80 text-white hover:bg-blue-600/80', progress: 'text-blue-500' },
     };
 
-    // --- Keyboard Shortcuts with Sounds ---
+    // Keyboard shortcuts logic (keep existing code)
     useEffect(() => {
         if (!isOpen) return;
-
         const handleKeyDown = (e) => {
             if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
-
             switch (e.code) {
                 case 'Space':
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (isRunning) {
-                        playSound('/sounds/click-pause.mp3'); // Added Sound
-                        pauseTimer();
-                    } else {
-                        playSound('/sounds/click-start.mp3'); // Added Sound
-                        startTimer();
-                    }
+                    e.preventDefault(); e.stopPropagation();
+                    if (isRunning) { playSound('/sounds/click-pause.mp3'); pauseTimer(); }
+                    else { playSound('/sounds/click-start.mp3'); startTimer(); }
                     break;
-
-                case 'KeyN':
-                    playSound('/sounds/click-skip.mp3'); // Added Sound
-                    skipMode();
-                    break;
-
-                case 'KeyR':
-                    playSound('/sounds/click-reset.mp3'); // Added Sound
-                    resetTimer();
-                    break;
-
-                case 'KeyM':
-                    setIsMinimized(prev => !prev);
-                    break;
-
+                case 'KeyN': playSound('/sounds/click-skip.mp3'); skipMode(); break;
+                case 'KeyR': playSound('/sounds/click-reset.mp3'); resetTimer(); break;
+                case 'KeyM': setIsMinimized(prev => !prev); break;
                 case 'Escape':
-                    if (isSettingsOpen) {
-                        setIsSettingsOpen(false);
-                    } else if (!isMinimized) {
-                        setIsMinimized(true);
-                    } else {
-                        setIsOpen(false);
-                    }
+                    if (isSettingsOpen) setIsSettingsOpen(false);
+                    else if (!isMinimized) setIsMinimized(true);
+                    else setIsOpen(false);
                     break;
-
-                default:
-                    break;
+                default: break;
             }
         };
-
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, isRunning, isMinimized, isSettingsOpen, startTimer, pauseTimer, skipMode, resetTimer, setIsSettingsOpen, setIsMinimized, setIsOpen, playSound]);
 
+    // Data fetching logic (keep existing code)
     useEffect(() => {
         if (isOpen) {
             const fetchUserAndTasks = async () => {
@@ -135,20 +125,15 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         }
     }, [isOpen, supabase]);
 
-
     if (!isOpen) return null;
-
     const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
     const seconds = (timeLeft % 60).toString().padStart(2, '0');
 
     if (isMinimized) {
-        // Fix: Removed "hours" calculation for simplicity as standard Pomodoro < 1hr
         return (
             <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group animate-in fade-in zoom-in-95 z-50">
                 <h3 className="text-white/80 text-lg font-semibold drop-shadow-lg mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">{linkedTask?.task || 'Focus Session'}</h3>
-                <span className="text-8xl font-bold text-white tabular-nums drop-shadow-2xl cursor-default select-none">
-                    {minutes}:{seconds}
-                </span>
+                <span className="text-8xl font-bold text-white tabular-nums drop-shadow-2xl cursor-default select-none">{minutes}:{seconds}</span>
                 <div className="flex gap-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                     <TimerControls isRunning={isRunning} startTimer={startTimer} pauseTimer={pauseTimer} resetTimer={resetTimer} skipMode={skipMode} isMinimized={true} maximize={() => setIsMinimized(false)} />
                 </div>
@@ -172,7 +157,6 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                         <Button onClick={() => setMode('break')} variant="ghost" className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === 'break' && colorMap.break.button)}>Short Break</Button>
                         <Button onClick={() => setMode('longBreak')} variant="ghost" className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === 'longBreak' && colorMap.longBreak.button)}>Long Break</Button>
                     </div>
-
                     <div className="relative my-4">
                         <ProgressCircle progress={progress} colorClass={colorMap[mode].progress} />
                         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
@@ -182,7 +166,6 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                             </div>
                         </div>
                     </div>
-
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="link" className="text-gray-400 hover:text-white h-auto p-1 max-w-[250px] truncate">
@@ -197,9 +180,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                             ))}
                         </DropdownMenuContent>
                     </DropdownMenu>
-
                     <TimerControls isRunning={isRunning} startTimer={startTimer} pauseTimer={pauseTimer} resetTimer={resetTimer} skipMode={skipMode} />
-
                     <Button variant="link" className="text-gray-500 mt-2 h-auto p-1 text-xs" onClick={() => setIsMinimized(prev => !prev)}>Minimize (M)</Button>
                 </CardContent>
             </Card>

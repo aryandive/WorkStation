@@ -5,8 +5,9 @@ import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
-import { Zap, Bell, Flame, Construction } from 'lucide-react';
-import AuthButton from './AuthButton'; // Import the new client-side AuthButton component
+import { Zap, Bell, Flame, Construction, Cloud, CloudOff } from 'lucide-react'; // Added Cloud icons
+import AuthButton from './AuthButton';
+import { useSubscription } from '@/context/SubscriptionContext'; // Added Subscription Context
 
 // Reusable IconButton component for consistency
 const IconButton = ({ src, alt, tooltip, onClick, href }) => {
@@ -44,6 +45,9 @@ export default function TopRightNav() {
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
 
+    // Get subscription status for the sync indicator
+    const { isPro, loading } = useSubscription();
+
     // Fullscreen toggle functionality
     const toggleFullScreen = () => {
         if (!document.fullscreenElement) {
@@ -69,6 +73,24 @@ export default function TopRightNav() {
     return (
         <>
             <div className="flex items-center gap-3">
+                {/* --- NEW: Cloud Sync Indicator --- */}
+                {!loading && (
+                    <div className="hidden md:block mr-1">
+                        <TooltipProvider delayDuration={100}>
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <div className={`p-2 rounded-full border transition-all cursor-help ${isPro ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-gray-800/50 border-gray-700 text-gray-500 hover:border-yellow-500/50 hover:text-yellow-500'}`}>
+                                        {isPro ? <Cloud size={20} /> : <CloudOff size={20} />}
+                                    </div>
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-gray-800 text-white border-gray-700">
+                                    <p>{isPro ? "Data Synced to Cloud" : "Local Storage (Not Synced)"}</p>
+                                </TooltipContent>
+                            </Tooltip>
+                        </TooltipProvider>
+                    </div>
+                )}
+
                 <IconButton
                     src="/streak.svg"
                     alt="Streak"
@@ -99,7 +121,8 @@ export default function TopRightNav() {
                     tooltip={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
                     onClick={toggleFullScreen}
                 />
-                {/* AuthButton is now included here */}
+
+                {/* AuthButton is included here */}
                 <div className="pl-2 border-l border-white/20">
                     <AuthButton />
                 </div>
@@ -161,4 +184,3 @@ export default function TopRightNav() {
         </>
     );
 }
-

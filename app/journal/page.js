@@ -1,32 +1,41 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation'; // Import useRouter
-import { saveLocalJournal, getLocalJournals, countLocalJournals } from '@/lib/localJournal';
+import { useRouter } from 'next/navigation';
+import { saveLocalJournal, getLocalJournals } from '@/lib/localJournal';
 import { createClient } from '@/utils/supabase/client';
 import eventBus from '@/lib/eventBus';
 import {
-    ChevronLeft, ChevronRight, RefreshCw, Bold, Italic, List, Heading1, Heading2, Search, Calendar as CalendarIcon, Type as ParagraphIcon, Bot, Lock, Edit, Zap
+    ChevronLeft, ChevronRight, RefreshCw, Bold, Italic, List, Heading1, Heading2, Search,
+    Calendar as CalendarIcon, Type as ParagraphIcon, Bot, Lock, Edit, Zap, User, Star, Crown,
+    LogIn, Save, Loader2, PanelTopClose, PanelTopOpen, ArrowLeft, ArrowRight, Hourglass, History
 } from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/context/AuthContext'; // Import useAuth
-import { useSubscription } from '@/context/SubscriptionContext'; // Import useSubscription
+import { useAuth } from '@/context/AuthContext';
+import { useSubscription } from '@/context/SubscriptionContext';
 import Link from 'next/link';
-// --- ADDON: Import SignUpModal (or a new "Migration Success" modal)
-import SignUpModal from '@/components/auth/SignUpModal'; // Re-using this modal for now
+import SignUpModal from '@/components/auth/SignUpModal';
+import { Label } from '@/components/ui/label';
+import JournalEntriesModal from '@/components/journal/JournalEntriesModal';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
-// --- Reusable Sub-Components (assuming they are defined in the same file or imported) ---
-const Greeting = ({ greeting }) => (
-    <div className="flex items-center gap-4 animate-fade-in">
-        <h1 className="text-4xl lg:text-5xl font-bold z-20 bg-gradient-to-r from-yellow-300 to-yellow-500 bg-clip-text text-transparent">
-            {greeting}
+// --- Constants (Defined outside to prevent re-renders) ---
+const HIGH_PERFORMANCE_PROMPTS = ["You had a great focus day! What was your secret?", "Biggest win today?", "How to carry this momentum to tomorrow?"];
+const LOW_PERFORMANCE_PROMPTS = ["What blocked you today?", "Biggest distraction?", "One small change for tomorrow?"];
+const GENERAL_PROMPTS = ["What are you grateful for?", "One thing you learned?", "Interesting problem solved?"];
+
+// --- Sub-Components ---
+
+const Greeting = ({ greeting, username }) => (
+    <div className="absolute bottom-6 left-6 z-20 animate-fade-in">
+        <h1 className="text-2xl md:text-3xl font-bold text-white drop-shadow-md">
+            {greeting}, <span className="text-yellow-400">{username}</span>
         </h1>
     </div>
 );
 
-const ActivityRing = ({ percentage, color, label, value }) => {
+const ActivityRing = ({ percentage, color, label, value, onClick }) => {
     const [animatedPercentage, setAnimatedPercentage] = useState(0);
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -35,9 +44,12 @@ const ActivityRing = ({ percentage, color, label, value }) => {
         return () => clearTimeout(timer);
     }, [percentage]);
     return (
-        <div className="relative w-16 h-16 lg:w-20 lg:h-20 group">
+        <div
+            onClick={onClick}
+            className={`relative w-16 h-16 lg:w-20 lg:h-20 group ${onClick ? 'cursor-pointer' : ''}`}
+        >
             <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
-                <span className="font-bold text-base lg:text-lg transition-all duration-500 group-hover:scale-110">{value}</span>
+                <span className={`font-bold text-base lg:text-lg transition-all duration-500 ${onClick ? 'group-hover:scale-110 group-hover:text-yellow-400' : ''}`}>{value}</span>
                 <span className="text-xs -mt-1 opacity-80">{label}</span>
             </div>
             <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
@@ -48,25 +60,18 @@ const ActivityRing = ({ percentage, color, label, value }) => {
     );
 };
 
-// ... (Prompt, Calendar, and other sub-components remain the same) ...
-const highPerformancePrompts = ["You had a great focus day! What was your secret to success?", "You completed a lot of tasks today. What was your biggest win?", "Momentum was on your side. How can you carry this into tomorrow?"];
-const lowPerformancePrompts = ["It looks like today was a challenge. What were some of the blockers you faced?", "What was the biggest distraction for you today?", "What's one small thing you can change to make tomorrow more focused?"];
-const generalPrompts = ["What are you most grateful for right now?", "Describe one thing you learned today, big or small.", "What was the most interesting problem you worked on today?"];
-
 const Prompt = ({ dailyStats }) => {
     const [prompt, setPrompt] = useState("Let's reflect on your day.");
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     const refreshPrompt = useCallback(() => {
         setIsRefreshing(true);
-        let promptPool = generalPrompts;
-
+        let promptPool = GENERAL_PROMPTS;
         if (dailyStats && dailyStats.sessions.value) {
             const pomosCompleted = parseInt(dailyStats.sessions.value, 10);
-            if (pomosCompleted >= 4) promptPool = highPerformancePrompts;
-            else if (pomosCompleted <= 1 && new Date().getHours() > 18) promptPool = lowPerformancePrompts;
+            if (pomosCompleted >= 4) promptPool = HIGH_PERFORMANCE_PROMPTS;
+            else if (pomosCompleted <= 1 && new Date().getHours() > 18) promptPool = LOW_PERFORMANCE_PROMPTS;
         }
-
         setPrompt(currentPrompt => {
             let newPrompt = currentPrompt;
             while (newPrompt === currentPrompt) {
@@ -74,35 +79,27 @@ const Prompt = ({ dailyStats }) => {
             }
             return newPrompt;
         });
-
         setTimeout(() => setIsRefreshing(false), 500);
     }, [dailyStats]);
 
-    useEffect(() => {
-        refreshPrompt();
-    }, [dailyStats, refreshPrompt]);
+    useEffect(() => { refreshPrompt(); }, [dailyStats, refreshPrompt]);
 
     return (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 animate-fade-in-up">
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
             <h2 className="font-bold mb-2 text-yellow-400 text-sm uppercase tracking-wider flex items-center"><Bot className="mr-2 w-4 h-4" /> Reflective Prompt</h2>
             <div className="flex items-center gap-2 p-3 bg-black/30 rounded-lg transition-all duration-300 hover:bg-black/40">
                 <p className="text-sm text-gray-200 flex-grow transition-opacity duration-300">{prompt}</p>
-                <button onClick={refreshPrompt} className="p-2 rounded-full bg-gray-700 hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 flex-shrink-0" aria-label="Refresh prompt"><RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /></button>
+                <button onClick={refreshPrompt} className="p-2 rounded-full bg-gray-700 hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 flex-shrink-0"><RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /></button>
             </div>
         </div>
     );
 };
 
-
 const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
     const [displayDate, setDisplayDate] = useState(new Date(selectedDate));
     const [transitionDirection, setTransitionDirection] = useState('right');
 
-    const entryDays = Object.keys(allEntries);
-
-    useEffect(() => {
-        setDisplayDate(new Date(selectedDate));
-    }, [selectedDate]);
+    useEffect(() => { setDisplayDate(new Date(selectedDate)); }, [selectedDate]);
 
     const changeMonth = (direction) => {
         setTransitionDirection(direction === 'left' ? 'right' : 'left');
@@ -126,29 +123,50 @@ const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
             const date = new Date(year, month, i);
             const dateKey = `${year}-${month + 1}-${i}`;
             const entryForDay = allEntries[dateKey];
-            const hasEntryWithContent = entryForDay && entryForDay.content && entryForDay.content.replace(/<[^>]*>/g, '').trim() !== '';
+            const hasEntry = entryForDay && entryForDay.content && entryForDay.content.replace(/<[^>]*>/g, '').trim() !== '';
 
             const isSelected = date.toDateString() === selectedDate.toDateString();
             const isToday = date.toDateString() === new Date().toDateString();
-            const isFilteredOut = searchFilter && hasEntryWithContent && !searchFilter.includes(dateKey);
+            const isFilteredOut = searchFilter && hasEntry && !searchFilter.includes(dateKey);
 
             days.push(
-                <div key={i} onClick={() => onDateSelect(date)} className={`p-1 cursor-pointer rounded-full text-center relative transition-all duration-200 transform hover:scale-110 ${isSelected ? 'bg-yellow-500 text-gray-900 font-bold scale-110 shadow-lg' : isToday ? 'border-2 border-yellow-500' : 'hover:bg-gray-700'} ${isFilteredOut ? 'opacity-20 pointer-events-none' : ''}`}>
-                    {i}
-                    {hasEntryWithContent && !isSelected && (<span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-yellow-500"></span>)}
-                </div>
+                <TooltipProvider key={i}>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <div
+                                onClick={() => onDateSelect(date)}
+                                className={cn(
+                                    "p-1 cursor-pointer rounded-full text-center relative transition-all duration-200 h-8 w-8 flex items-center justify-center text-sm",
+                                    isSelected ? 'bg-yellow-500 text-black font-bold shadow-lg scale-110 z-10' : 'hover:bg-gray-700 text-gray-300',
+                                    isToday && !isSelected ? 'border-2 border-yellow-500 text-yellow-500 font-semibold' : '',
+                                    isFilteredOut ? 'opacity-20 pointer-events-none' : ''
+                                )}
+                            >
+                                {i}
+                                {hasEntry && !isSelected && (<span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-yellow-500"></span>)}
+                            </div>
+                        </TooltipTrigger>
+                        {hasEntry && (
+                            <TooltipContent className="bg-gray-800 border-gray-700 text-white text-xs">
+                                <p>{entryForDay.title || "Untitled Entry"}</p>
+                            </TooltipContent>
+                        )}
+                    </Tooltip>
+                </TooltipProvider>
             );
         }
 
         return (
             <div className={`animate-fade-in-${transitionDirection}`}>
                 <div className="flex justify-between items-center mb-4">
-                    <button onClick={() => changeMonth('left')} className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-all duration-300"><ChevronLeft size={20} /></button>
-                    <h3 className="font-bold text-lg flex items-center"><CalendarIcon className="mr-2 w-5 h-5 text-yellow-500" />{displayDate.toLocaleString('default', { month: 'long' })} {displayDate.getFullYear()}</h3>
-                    <button onClick={() => changeMonth('right')} className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-all duration-300"><ChevronRight size={20} /></button>
+                    <button onClick={() => changeMonth('left')} className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors"><ChevronLeft size={16} /></button>
+                    <h3 className="font-bold text-base flex items-center"><CalendarIcon className="mr-2 w-4 h-4 text-yellow-500" />{displayDate.toLocaleString('default', { month: 'long' })} {displayDate.getFullYear()}</h3>
+                    <button onClick={() => changeMonth('right')} className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors"><ChevronRight size={16} /></button>
                 </div>
-                <div className="grid grid-cols-7 gap-2 text-sm">
-                    {dayHeaders.map((day, index) => (<div key={`${day}-${index}`} className="font-bold text-gray-400 text-center py-1">{day}</div>))}
+                <div className="grid grid-cols-7 gap-1 text-xs mb-2">
+                    {dayHeaders.map((day, index) => (<div key={`${day}-${index}`} className="font-bold text-gray-500 text-center">{day}</div>))}
+                </div>
+                <div className="grid grid-cols-7 gap-1">
                     {days}
                 </div>
             </div>
@@ -156,16 +174,23 @@ const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
     };
 
     return (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-5 rounded-2xl shadow-lg border border-gray-700 flex-grow">
+        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex-grow">
             {renderCalendar()}
         </div>
     );
 };
 
-const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMode, setIsEditMode, isSavingDisabled, entryCount }) => {
+const JournalEditor = ({
+    entry, onEntryChange, dailyStats, isPastDate, isFutureDate, isEditMode, setIsEditMode,
+    isSavingDisabled, onEntriesClick, saveStatus, onNavigate
+}) => {
     const editorRef = useRef(null);
 
-    const isLocked = (isPastDate && !isEditMode) || isSavingDisabled;
+    // Lock logic: Locked if it's (Past OR Future) AND not in edit mode.
+    // This ensures Time Capsules are locked by default until "Opened".
+    const isLocked = ((isPastDate || isFutureDate) && !isEditMode);
+
+    const isEmpty = !entry.content || entry.content.replace(/<[^>]*>/g, '').trim() === '';
 
     useEffect(() => {
         if (editorRef.current && editorRef.current.innerHTML !== entry.content) {
@@ -174,64 +199,155 @@ const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMod
     }, [entry.id, entry.content]);
 
     const handleContentChange = (e) => {
-        if (isLocked) return;
         onEntryChange({ ...entry, content: e.currentTarget.innerHTML });
     };
     const handleTitleChange = (e) => {
-        if (isLocked) return;
         onEntryChange({ ...entry, title: e.target.value });
     };
     const formatDoc = (command, value = null) => {
-        if (isLocked) return;
         document.execCommand(command, false, value);
         editorRef.current.focus();
     };
-    const formatButtonClass = "p-2 rounded-md bg-gray-800 hover:bg-gray-700 transition-all duration-300 hover:scale-110 disabled:opacity-50 disabled:pointer-events-none";
+    const formatButtonClass = "p-1.5 md:p-2 rounded-md bg-gray-800 hover:bg-gray-700 transition-all text-gray-300 hover:text-white disabled:opacity-30";
 
     return (
-        <section className="flex-grow bg-gradient-to-b from-gray-900 to-gray-800 rounded-2xl p-5 md:p-7 flex flex-col overflow-hidden shadow-xl border border-gray-700 animate-fade-in-left">
-            <div className="flex items-center gap-4 mb-6 relative">
-                <input value={entry.title || ''} onChange={handleTitleChange} disabled={isLocked} className="bg-transparent text-2xl lg:text-3xl font-bold w-full focus:outline-none border-b-2 border-transparent focus:border-yellow-500 transition-all duration-300 pb-1 disabled:opacity-70" placeholder="Journal Entry Title" />
-                <div className="relative">
-                    <Image src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNTFmM2U3ZDAxMDRmOTczZGIyNDkyODYzOTczY2I1MjZkYmFjNGE2ZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/RgzryV9I1h5oYc1R26/giphy.gif" alt="Decorative animation" width={48} height={48} unoptimized={true} className="w-12 h-12 rounded-full flex-shrink-0 border-2 border-yellow-500 shadow-lg" />
+        <section className="flex-grow bg-gradient-to-b from-gray-900 to-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-xl border border-gray-700 animate-fade-in-left h-full">
+            {/* Header Area */}
+            <div className="p-5 md:p-7 pb-2">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+                    {/* Navigation and Title */}
+                    <div className="flex items-center gap-3 w-full">
+                        <Button variant="ghost" size="icon" onClick={() => onNavigate(-1)} className="text-gray-400 hover:text-white shrink-0">
+                            <ChevronLeft />
+                        </Button>
+
+                        <div className="relative flex-grow">
+                            <input
+                                value={entry.title || ''}
+                                onChange={handleTitleChange}
+                                disabled={isLocked}
+                                className="bg-transparent text-xl md:text-3xl font-bold w-full focus:outline-none border-b-2 border-transparent focus:border-yellow-500 transition-all pb-1 disabled:opacity-70 placeholder:text-gray-600"
+                                placeholder={isFutureDate ? "Time Capsule Title" : "Journal Entry Title"}
+                            />
+                            {/* Auto-Save Indicator */}
+                            <div className="absolute right-0 top-0 md:top-2 text-xs font-medium flex items-center gap-1.5">
+                                {saveStatus === 'saving' && (
+                                    <span className="text-yellow-500 flex items-center gap-1 animate-pulse">
+                                        <Loader2 className="w-3 h-3 animate-spin" /> Saving...
+                                    </span>
+                                )}
+                                {saveStatus === 'saved' && (
+                                    <span className="text-green-500 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-1 duration-500">
+                                        <Save className="w-3 h-3" /> Saved
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <Button variant="ghost" size="icon" onClick={() => onNavigate(1)} className="text-gray-400 hover:text-white shrink-0">
+                            <ChevronRight />
+                        </Button>
+                    </div>
+
+                    {/* User Badge */}
+                    <div className="self-end md:self-auto shrink-0">
+                        {!dailyStats.user ? (
+                            <Button size="sm" asChild className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-9 px-4 rounded-full shadow-lg">
+                                <Link href="/login">Sign In</Link>
+                            </Button>
+                        ) : dailyStats.isPro ? (
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-600 shadow-lg border-2 border-white/20" title="Pro User">
+                                <Crown className="text-black w-5 h-5" />
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-700 border-2 border-yellow-500/50 shadow-lg" title="Experience User">
+                                <Star className="text-yellow-500 w-5 h-5" />
+                            </div>
+                        )}
+                    </div>
+                </div>  
+
+                {isSavingDisabled && (
+                    <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg text-center animate-in fade-in slide-in-from-top-2">
+                        <p className="font-bold text-yellow-300 text-sm">Journal Limit Reached</p>
+                        <Button asChild size="sm" variant="link" className="text-yellow-200 h-auto p-0">
+                            <Link href="/landing">Upgrade to Pro</Link>
+                        </Button>
+                    </div>
+                )}
+
+                {/* Stats / Rings */}
+                <div className="flex-shrink-0 flex items-center gap-4 mb-4 p-3 bg-black/30 rounded-xl backdrop-blur-sm border border-gray-700/50 overflow-x-auto">
+                    <h3 className="font-bold text-gray-400 hidden sm:block text-sm uppercase tracking-wide">Daily Snapshot:</h3>
+                    <div className="flex items-center gap-6 w-full justify-around sm:justify-start">
+                        <ActivityRing percentage={dailyStats.entries.percentage} color="#38B2AC" value={dailyStats.entries.value} label="Entries" onClick={onEntriesClick} />
+                        <ActivityRing percentage={dailyStats.tasks.percentage} color="#48BB78" value={dailyStats.tasks.value} label="Tasks" />
+                        <ActivityRing percentage={dailyStats.sessions.percentage} color="#FBBF24" value={dailyStats.sessions.value} label="Focus" />
+                    </div>
                 </div>
             </div>
 
-            {isSavingDisabled && (
-                <div className="mb-4 p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg text-center">
-                    <p className="font-bold text-yellow-300">Journal Limit Reached</p>
-                    <p className="text-sm text-yellow-200/90 mt-1">You&apos;ve reached the 30-entry limit for the free plan.</p>
-                    <Button asChild size="sm" className="mt-3 bg-yellow-500 text-gray-900 hover:bg-yellow-400">
-                        <Link href="/pricing"><Zap size={14} className="mr-2" /> Upgrade to Pro for Unlimited Entries</Link>
-                    </Button>
-                </div>
-            )}
-
-            <div className="flex-shrink-0 flex items-center gap-4 md:gap-6 mb-6 p-4 bg-black/30 rounded-xl backdrop-blur-sm border border-gray-700/50">
-                <h3 className="font-bold text-gray-400 hidden sm:block">Today&apos;s Focus:</h3>
-                <div className="flex items-center gap-4 md:gap-6 w-full justify-around sm:justify-start">
-                    <ActivityRing percentage={dailyStats.focus.percentage} color="#38B2AC" value={dailyStats.focus.value} label="Focus Goal" />
-                    <ActivityRing percentage={dailyStats.tasks.percentage} color="#48BB78" value={dailyStats.tasks.value} label="Tasks Today" />
-                    <ActivityRing percentage={dailyStats.sessions.percentage} color="#FBBF24" value={dailyStats.sessions.value} label="Pomos Today" />
-                </div>
-            </div>
-            <div className="flex gap-2 mb-4 border-b border-gray-700 pb-3 items-center">
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('formatBlock', 'p')} aria-label="Paragraph"><ParagraphIcon size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('bold')} aria-label="Bold"><Bold size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('italic')} aria-label="Italic"><Italic size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('insertUnorderedList')} aria-label="Bulleted List"><List size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('formatBlock', 'h1')} aria-label="Heading 1"><Heading1 size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={18} /></button>
+            {/* Sticky Toolbar */}
+            <div className="sticky top-0 z-10 bg-gray-900/95 backdrop-blur border-y border-gray-700 px-5 py-2 flex items-center gap-1 shadow-md">
+                <button className={formatButtonClass} onClick={() => formatDoc('formatBlock', 'p')} aria-label="Paragraph"><ParagraphIcon size={16} /></button>
+                <button className={formatButtonClass} onClick={() => formatDoc('bold')} aria-label="Bold"><Bold size={16} /></button>
+                <button className={formatButtonClass} onClick={() => formatDoc('italic')} aria-label="Italic"><Italic size={16} /></button>
+                <button className={formatButtonClass} onClick={() => formatDoc('insertUnorderedList')} aria-label="Bulleted List"><List size={16} /></button>
+                <button className={formatButtonClass} onClick={() => formatDoc('formatBlock', 'h1')} aria-label="Heading 1"><Heading1 size={16} /></button>
+                <button className={formatButtonClass} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={16} /></button>
                 <div className="ml-auto flex items-center gap-2">
-                    {isPastDate && (entry.content && entry.content.replace(/<[^>]*>/g, '').trim() !== '') && !isEditMode && (
-                        <Button onClick={() => setIsEditMode(true)} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900" disabled={isSavingDisabled}><Edit size={16} className="mr-2" /> Edit Entry</Button>
+                    {/* Unified Edit/Lock Button for Past and Future Dates */}
+                    {(isPastDate || isFutureDate) && !isEditMode && (
+                        <Button onClick={() => setIsEditMode(true)} size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 h-8 text-xs" disabled={isSavingDisabled}><Edit size={14} className="mr-1" /> Edit</Button>
                     )}
-                    {isPastDate && isEditMode && (
-                        <Button onClick={() => setIsEditMode(false)} variant="outline" className="text-yellow-400 border-yellow-500 hover:bg-yellow-500/10"><Lock size={16} className="mr-2" /> Save & Lock</Button>
+                    {(isPastDate || isFutureDate) && isEditMode && (
+                        <Button onClick={() => setIsEditMode(false)} size="sm" variant="outline" className="text-yellow-400 border-yellow-500 hover:bg-yellow-500/10 h-8 text-xs"><Lock size={14} className="mr-1" /> Lock</Button>
                     )}
                 </div>
             </div>
-            <div ref={editorRef} contentEditable={!isLocked} onInput={handleContentChange} className={`prose prose-invert max-w-none flex-grow overflow-y-auto custom-scrollbar p-4 leading-relaxed bg-gray-900/50 rounded-xl border border-gray-700/30 focus:outline-none transition-all duration-300 ${isLocked ? 'focus:ring-0 opacity-70 cursor-not-allowed' : 'focus:ring-2 focus:ring-yellow-500'}`} placeholder="Start writing here..."></div>
+
+            {/* Editor Content */}
+            <div className="flex-grow relative bg-gray-900/50">
+
+                {/* Retrospective Overlay (Past & Empty & Locked) */}
+                {isPastDate && isEmpty && !isEditMode && (
+                    <div
+                        onClick={() => setIsEditMode(true)}
+                        className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-sm cursor-pointer hover:bg-gray-900/50 transition-all group"
+                    >
+                        <div className="bg-gray-800 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform border border-gray-700 group-hover:border-yellow-500">
+                            <History size={32} className="text-gray-400 group-hover:text-yellow-400" />
+                        </div>
+                        <p className="text-lg font-bold text-gray-200 group-hover:text-white">No entry recorded.</p>
+                        <p className="text-sm text-gray-400 mt-1">Add a retrospective note? <span className="text-yellow-400 underline">Click to Edit</span></p>
+                    </div>
+                )}
+
+                {/* Time Capsule Overlay (Future & Empty & Locked) */}
+                {isFutureDate && isEmpty && !isEditMode && (
+                    <div
+                        onClick={() => setIsEditMode(true)} // Clicking now enters Edit Mode
+                        className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/40 backdrop-blur-[2px] cursor-pointer hover:bg-gray-900/30 transition-all group"
+                    >
+                        <div className="bg-gray-800/80 p-4 rounded-full mb-3 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.3)] group-hover:scale-110 transition-transform">
+                            <Hourglass size={32} className="text-indigo-400" />
+                        </div>
+                        <p className="text-lg font-bold text-indigo-200">Time Capsule</p>
+                        <p className="text-sm text-indigo-300/80 mt-1">Write a note to your future self. <span className="text-white underline">Click to open.</span></p>
+                    </div>
+                )}
+
+                <div
+                    ref={editorRef}
+                    contentEditable={!isLocked}
+                    onInput={handleContentChange}
+                    className={cn(
+                        "prose prose-invert max-w-none w-full h-full overflow-y-auto custom-scrollbar p-6 leading-relaxed focus:outline-none",
+                        isLocked ? 'opacity-80' : ''
+                    )}
+                    placeholder={isFutureDate ? "Dear Future Me..." : "Start writing here..."}
+                ></div>
+            </div>
         </section>
     );
 };
@@ -247,364 +363,335 @@ export default function JournalPage() {
     const [entry, setEntry] = useState({ id: null, date: null, title: '', content: '' });
     const [allEntries, setAllEntries] = useState({});
     const [greeting, setGreeting] = useState('');
-    const [dailyStats, setDailyStats] = useState({ focus: { percentage: 0, value: '0/120m' }, tasks: { percentage: 0, value: '0/0' }, sessions: { percentage: 0, value: '0/0' }, });
+
+    // UI States
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [saveStatus, setSaveStatus] = useState('idle');
+
+    // Stats State
+    const [dailyStats, setDailyStats] = useState({
+        entries: { percentage: 0, value: '0/0', limit: 30 },
+        tasks: { percentage: 0, value: '0/0' },
+        sessions: { percentage: 0, value: '0/0' },
+        user: null,
+        isPro: false
+    });
+
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredEntryDays, setFilteredEntryDays] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
 
-    // --- ADDON: State for auth/migration modal
+    // Modal States
     const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
+    const [modalMode, setModalMode] = useState('signup');
     const [hasCheckedMigration, setHasCheckedMigration] = useState(false);
-    //
+    const [isEntriesListOpen, setIsEntriesListOpen] = useState(false);
 
     const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-    const journalEntryCount = Object.keys(allEntries).length;
-    const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
 
-    // **NEW**: Combined loading state
+    // Updated: Count only non-empty entries
+    const journalEntryCount = Object.values(allEntries).filter(e => {
+        const content = e.content ? e.content.replace(/<[^>]*>/g, '').trim() : '';
+        return content.length > 0;
+    }).length;
+
+    const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
     const isLoading = authLoading || subLoading;
 
-    // --- Data Fetching and Side Effects ---
+    // --- Helpers ---
+    const changeDate = (days) => {
+        const newDate = new Date(selectedDate);
+        newDate.setDate(newDate.getDate() + days);
+        setSelectedDate(newDate);
+    };
 
-    useEffect(() => {
-        // Redirect anonymous users
-        if (!isLoading && !user) {
-            router.push('/landing');
-        }
-    }, [user, isLoading, router]);
-
+    // --- Fetch Logic ---
     const fetchJournalEntries = useCallback(async () => {
-        if (isLoading || !user) return; // Wait for loading to finish and user to be present
+        if (isLoading) return;
 
-        if (isPro) { // Premium User
-            console.log("User is Pro, fetching from Supabase...");
-            const { data, error } = await supabase
-                .from('journal_entries')
-                .select('*')
-                .eq('user_id', user.id);
-
-            if (error) {
-                console.error("Error fetching journal entries:", error);
-                setAllEntries({});
-            } else {
+        if (user && isPro) {
+            const { data, error } = await supabase.from('journal_entries').select('*').eq('user_id', user.id);
+            if (error) { console.error("Error fetching journal entries:", error); setAllEntries({}); }
+            else {
                 const entriesMap = data.reduce((acc, entry) => {
-                    // Handle potential timestamp with timezone
                     const date = new Date(entry.date.includes('T') ? entry.date : entry.date + 'T12:00:00Z');
-                    const key = getDateKey(date);
-                    acc[key] = entry;
+                    acc[getDateKey(date)] = entry;
                     return acc;
                 }, {});
                 setAllEntries(entriesMap);
             }
-        } else { // Free Tier User
-            console.log("User is Free, fetching from Local Storage...");
+        } else {
             setAllEntries(getLocalJournals());
         }
     }, [user, isPro, isLoading, supabase]);
 
-
     const fetchDailyStats = useCallback(async () => {
-        // This function logic remains the same
-        const { data: { user } } = await supabase.auth.getUser();
         const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
         let activeTasks = [];
-        let allTasks = [];
+
         if (user) {
-            const { data: activeData, error: activeError } = await supabase.from('todos').select('is_complete, pomodoros_spent, pomodoros_estimated').eq('user_id', user.id).gte('updated_at', todayStart);
-            if (activeError) { console.error("Error fetching active daily stats:", activeError); return; }
-            activeTasks = activeData || [];
-            const { data: allData, error: allError } = await supabase.from('todos').select('id, is_complete').eq('user_id', user.id);
-            if (allError) { console.error("Error fetching all tasks:", allError); return; }
-            allTasks = allData || [];
+            const { data } = await supabase.from('todos').select('is_complete, pomodoros_spent, pomodoros_estimated').eq('user_id', user.id).gte('updated_at', todayStart);
+            activeTasks = data || [];
         } else {
             const localTasks = JSON.parse(localStorage.getItem('ws_tasks')) || [];
-            allTasks = localTasks;
-            activeTasks = localTasks.filter(t => {
-                const updatedDate = new Date(t.updated_at || t.created_at);
-                return updatedDate >= new Date(todayStart);
-            });
+            activeTasks = localTasks.filter(t => new Date(t.updated_at || t.created_at) >= new Date(todayStart));
         }
-        const focusTime = Math.round(activeTasks.reduce((acc, t) => acc + (t.pomodoros_spent || 0), 0) * 25);
-        const focusGoal = 120;
-        const tasksCompletedToday = activeTasks.filter(t => t.is_complete).length;
-        const tasksWorkedOnToday = activeTasks.length;
-        const pomodorosCompleted = activeTasks.reduce((acc, t) => acc + (t.pomodoros_spent || 0), 0);
-        const pomodorosEstimated = activeTasks.reduce((acc, t) => acc + (t.pomodoros_estimated || 1), 0);
-        setDailyStats({
-            focus: { percentage: focusGoal > 0 ? Math.min(100, (focusTime / focusGoal) * 100) : 0, value: `${focusTime}/${focusGoal}m` },
-            tasks: { percentage: tasksWorkedOnToday > 0 ? (tasksCompletedToday / tasksWorkedOnToday) * 100 : 0, value: `${tasksCompletedToday}/${tasksWorkedOnToday}` },
-            sessions: { percentage: pomodorosEstimated > 0 ? (pomodorosCompleted / pomodorosEstimated) * 100 : 0, value: `${pomodorosCompleted}/${pomodorosEstimated}` },
-        });
-    }, [supabase]); // Made supabase a dependency
 
+        const tasksCompleted = activeTasks.filter(t => t.is_complete).length;
+        const tasksTotal = activeTasks.length;
+        const pomosCompleted = activeTasks.reduce((acc, t) => acc + (t.pomodoros_spent || 0), 0);
+        const pomosTotal = activeTasks.reduce((acc, t) => acc + (t.pomodoros_estimated || 1), 0);
+
+        setDailyStats(prev => ({
+            ...prev,
+            tasks: { percentage: tasksTotal > 0 ? (tasksCompleted / tasksTotal) * 100 : 0, value: `${tasksCompleted}/${tasksTotal}` },
+            sessions: { percentage: pomosTotal > 0 ? (pomosCompleted / pomosTotal) * 100 : 0, value: `${pomosCompleted}/${pomosTotal}` },
+            user: user,
+            isPro: isPro
+        }));
+    }, [supabase, user, isPro]);
+
+    // --- Effects ---
     useEffect(() => {
-        const initialize = () => {
-            const hour = new Date().getHours();
-            setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
-            fetchDailyStats();
-
-            const handleTasksUpdated = () => fetchDailyStats();
-            eventBus.on('tasksUpdated', handleTasksUpdated);
-
-            return () => eventBus.remove('tasksUpdated', handleTasksUpdated);
-        };
-        initialize();
+        const hour = new Date().getHours();
+        setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
+        fetchDailyStats();
+        eventBus.on('tasksUpdated', fetchDailyStats);
+        return () => eventBus.remove('tasksUpdated', fetchDailyStats);
     }, [fetchDailyStats]);
 
     useEffect(() => {
-        fetchJournalEntries();
-    }, [fetchJournalEntries]); // Re-fetch when user/pro status changes
+        // Use the updated logic here too for the ring visual
+        const count = Object.values(allEntries).filter(e => {
+            const content = e.content ? e.content.replace(/<[^>]*>/g, '').trim() : '';
+            return content.length > 0;
+        }).length;
 
-    // --- ADDON: Data Migration Effect ---
+        const limit = isPro ? 365 : 30;
+        const percentage = Math.min(100, (count / limit) * 100);
+        setDailyStats(prev => ({ ...prev, entries: { percentage, value: `${count}/${limit}`, limit } }));
+    }, [allEntries, isPro]);
+
+    useEffect(() => { fetchJournalEntries(); }, [fetchJournalEntries]);
+
     useEffect(() => {
         if (isPro && user && !isLoading && !hasCheckedMigration) {
-            console.log("Checking for local data to migrate...");
-            setHasCheckedMigration(true); // Only run this check once
-
-            const localJournals = getLocalJournals();
-            const localEntries = Object.entries(localJournals);
-
-            if (localEntries.length > 0) {
-                console.log(`Found ${localEntries.length} local entries. Migrating to Supabase...`);
-
-                const formattedEntries = localEntries.map(([dateKey, entry]) => {
-                    const [year, month, day] = dateKey.split('-').map(Number);
-                    const isoDate = new Date(year, month - 1, day).toISOString().split('T')[0];
-                    return {
-                        user_id: user.id,
-                        date: isoDate,
-                        title: entry.title,
-                        content: entry.content,
-                    };
+            setHasCheckedMigration(true);
+            const local = getLocalJournals();
+            if (Object.keys(local).length > 0) {
+                const formatted = Object.entries(local).map(([k, v]) => {
+                    const [y, m, d] = k.split('-').map(Number);
+                    return { user_id: user.id, date: new Date(y, m - 1, d).toISOString().split('T')[0], title: v.title, content: v.content };
                 });
-
-                const migrateData = async () => {
-                    try {
-                        // Upsert to prevent duplicates if user downgraded and re-upgraded
-                        const { error } = await supabase
-                            .from('journal_entries')
-                            .upsert(formattedEntries, { onConflict: 'user_id, date' });
-
-                        if (error) {
-                            throw error;
-                        }
-
-                        console.log("Migration successful!");
-                        localStorage.removeItem('ws_journal_entries'); // Clear local data
-                        // (Optional: show a success modal)
-
-                        // Refetch entries from Supabase to update the UI
-                        fetchJournalEntries();
-
-                    } catch (error) {
-                        console.error("Error migrating local journal entries:", error);
-                        // (Optional: show an error modal)
-                    }
-                };
-                migrateData();
-            } else {
-                console.log("No local journal entries found to migrate.");
+                supabase.from('journal_entries').upsert(formatted, { onConflict: 'user_id, date' })
+                    .then(() => { localStorage.removeItem('ws_journal_entries'); fetchJournalEntries(); });
             }
         }
     }, [isPro, user, isLoading, hasCheckedMigration, supabase, fetchJournalEntries]);
-    // --- End of Data Migration Effect ---
-
 
     useEffect(() => {
         const dateKey = getDateKey(selectedDate);
-        const savedEntry = allEntries[dateKey] || {};
-        const title = savedEntry.title || selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-        setEntry({
-            id: savedEntry.id || null,
-            date: dateKey,
-            title,
-            content: savedEntry.content || ''
-        });
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
-        setIsEditMode(checkDate >= today);
+        const saved = allEntries[dateKey] || {};
+        const title = saved.title || selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+        setEntry({ id: saved.id || null, date: dateKey, title, content: saved.content || '' });
     }, [selectedDate, allEntries]);
-
-    // --- Search Filtering ---
+    // 2. Lock Logic Effect: Runs ONLY when you actually change the date
+    // This prevents the app from re-locking while you are typing/saving on the same date.
     useEffect(() => {
-        if (searchQuery.trim() === '') {
-            setFilteredEntryDays(null);
-            return;
-        }
-        const filteredDays = Object.entries(allEntries)
-            .filter(([, entryData]) => entryData.title?.toLowerCase().includes(searchQuery.toLowerCase()))
-            .map(([dateKey]) => dateKey);
-        setFilteredEntryDays(filteredDays);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const check = new Date(selectedDate); check.setHours(0, 0, 0, 0);
+        // If it's Today -> Unlocked (Edit Mode True)
+        // If it's Past/Future -> Locked (Edit Mode False)
+        // This only runs ONCE when you navigate to the date.
+        setIsEditMode(check.getTime() === today.getTime());
+    }, [selectedDate]);
+
+    useEffect(() => {
+        if (!searchQuery.trim()) { setFilteredEntryDays(null); return; }
+        const filtered = Object.entries(allEntries)
+            .filter(([, v]) => v.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+            .map(([k]) => k);
+        setFilteredEntryDays(filtered);
     }, [searchQuery, allEntries]);
 
-    // --- Entry Saving Logic ---
+    // --- Saving Logic ---
     const timeoutRef = useRef(null);
     const handleEntryChange = useCallback((newEntry) => {
         setEntry(newEntry);
+        setSaveStatus('saving');
 
-        // Prevent saving for free tier if limit is reached and it's a new entry
         const dateKey = getDateKey(selectedDate);
-        const isNewEntry = !allEntries[dateKey];
-        if (isFreeTierLimitReached && isNewEntry) {
-            // This now just prevents saving, the UI is handled by `isSavingDisabled`
-            console.warn("Journal limit reached. Upgrade to save new entries.");
-            return;
+        // Only block saving if limit is reached AND this is a NEW entry that actually has content
+        if (isFreeTierLimitReached && !allEntries[dateKey]) {
+            const newContent = newEntry.content?.replace(/<[^>]*>/g, '').trim() || '';
+            if (newContent.length > 0) {
+                setSaveStatus('error');
+                return;
+            }
         }
 
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
         timeoutRef.current = setTimeout(async () => {
             if (user && isPro) {
-                // Save to Supabase for Pro users
-                const { data, error } = await supabase
-                    .from('journal_entries')
-                    .upsert({
-                        id: newEntry.id,
-                        user_id: user.id,
-                        date: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).toISOString().split('T')[0],
-                        title: newEntry.title,
-                        content: newEntry.content,
-                    }, { onConflict: 'id' }) // Use 'id' for conflict to ensure upsert works correctly
-                    .select()
-                    .single();
-
-                if (error) {
-                    console.error("Error saving to Supabase:", error);
-                } else if (data) {
+                const payload = {
+                    user_id: user.id,
+                    date: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).toISOString().split('T')[0],
+                    title: newEntry.title,
+                    content: newEntry.content,
+                };
+                if (newEntry.id) payload.id = newEntry.id;
+                const { data } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' }).select().single();
+                if (data) {
                     setAllEntries(prev => ({ ...prev, [dateKey]: data }));
                     if (!newEntry.id) setEntry(prev => ({ ...prev, id: data.id }));
                 }
-            } else if (user) {
-                // Save to local storage for Free users
+            } else {
                 saveLocalJournal(dateKey, { title: newEntry.title, content: newEntry.content });
                 setAllEntries(getLocalJournals());
             }
+            setSaveStatus('saved');
+            setTimeout(() => setSaveStatus('idle'), 2000);
         }, 1000);
     }, [selectedDate, user, isPro, isFreeTierLimitReached, allEntries, supabase]);
+
+    // --- Popups ---
+    const handleEditorClick = () => {
+        if (!user) { setModalMode('signup'); setIsSignUpModalOpen(true); return; }
+        if (user && !isPro) {
+            const todayStr = new Date().toDateString();
+            if (localStorage.getItem('journal_upgrade_popup_last_shown') !== todayStr) {
+                setModalMode('upgrade'); setIsSignUpModalOpen(true);
+                localStorage.setItem('journal_upgrade_popup_last_shown', todayStr);
+            }
+        }
+    };
 
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
     const isPastDate = checkDate < today;
+    const isFutureDate = checkDate > today;
 
-    // ADDON: Handle auth modal for free users
-    const handleEditorClick = () => {
-        if (!isPro && !isLoading) {
-            setIsSignUpModalOpen(true);
-        }
-    };
+    const editorWrapperProps = !isPro ? { onClickCapture: handleEditorClick } : {};
 
-    // MODIFIED: Show modal on editor focus *only if free user*
-    const editorWrapperProps = !isPro ? { onClick: handleEditorClick } : {};
+    if (isLoading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white"><Loader2 className="animate-spin mr-2" /> Loading...</div>;
 
-
-    // Loading state for initial auth/sub check
-    if (isLoading) {
-        return <div className="min-h-screen w-full bg-gray-950 flex items-center justify-center text-white">Loading your journal...</div>;
-    }
-
-    // This shouldn't be reached if the redirect works, but as a fallback.
-    if (!user) {
-        return <div className="min-h-screen w-full bg-gray-950 flex items-center justify-center text-white">Redirecting...</div>;
-    }
-
-    // Check if motion reduction is enabled
     const reducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
-    // Render the journal page
     return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-gray-900 to-gray-950 text-gray-100 font-sans">
-            <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} />
+        <div className="min-h-screen w-full bg-gray-950 text-gray-100 font-sans flex flex-col">
+            <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} mode={modalMode} />
+            <JournalEntriesModal isOpen={isEntriesListOpen} setIsOpen={setIsEntriesListOpen} allEntries={allEntries} onSelectEntry={setSelectedDate} />
+
             <style jsx global>{`
-                /* ... animations ... */
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
                 @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-                @keyframes fadeInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-
                 .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
                 .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
                 .animate-fade-in-left { animation: fadeInLeft 0.6s ease-out forwards; }
-                .animate-fade-in-right { animation: fadeInRight 0.6s ease-out forwards; }
-
-                ${reducedMotion ? `
-                .animate-fade-in, .animate-fade-in-up, .animate-fade-in-left, .animate-fade-in-right {
-                    animation-duration: 0.01ms !important;
-                }
-                ` : ''}
-
+                ${reducedMotion ? `* { animation-duration: 0.01ms !important; }` : ''}
                 [contenteditable]:focus { outline: none; }
-
-                .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 10px; }
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
-
-                /* --- STYLING FIXES --- */
-                .prose p {
-                    font-size: 1rem;
-                    line-height: 1.7; /* Increased for readability */
-                    margin-top: 0.25em;
-                    margin-bottom: 0.25em;
-                }
-                .prose h1 { font-size: 1.875rem; margin-bottom: 0.75rem; margin-top: 1.5rem; }
-                .prose h2 { font-size: 1.5rem; margin-bottom: 0.75rem; margin-top: 1.25rem; }
-                .prose ul, .prose ol { padding-left: 1.75rem; margin-top: 0.5em; margin-bottom: 0.5em; }
+                .prose p { margin-top: 0.5em; margin-bottom: 0.5em; }
+                .prose h1, .prose h2 { margin-top: 1em; margin-bottom: 0.5em; }
            `}</style>
-            <div className="flex flex-col py-4 px-4 sm:px-8 md:px-12 lg:px-16 gap-5">
-                <header className="flex-shrink-0 h-48 lg:h-56 relative flex justify-center items-center rounded-2xl overflow-hidden shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-r from-purple-900/70 via-blue-900/50 to-indigo-900/70 z-0"></div>
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-gray-900/80 to-gray-950 z-10"></div>
-                    <Greeting greeting={`${greeting}, ${user?.email?.split('@')[0] || 'Explorer'}`} />
+
+            <div className="flex flex-col flex-grow py-4 px-3 sm:px-6 md:px-8 lg:px-12 gap-5 max-w-[1920px] mx-auto w-full">
+
+                {/* Header with Video Background */}
+                <header className="flex-shrink-0 h-48 lg:h-56 relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
+                    <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover z-0">
+                        <source src="/video123.mp4" type="video/mp4" />
+                    </video>
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-900/40 to-transparent z-10"></div>
+                    <div className="absolute inset-0 bg-black/20 z-10"></div>
+
+                    <Greeting greeting={greeting} username={user?.email?.split('@')[0] || 'Explorer'} />
                 </header>
-                <main className="flex-grow flex flex-col lg:flex-row gap-5">
-                    <aside className="w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5">
+
+                {/* Mobile: Toggle Sidebar Button */}
+                <div className="lg:hidden flex justify-end">
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                        className="bg-gray-800 border-gray-700 text-yellow-400 hover:text-yellow-300"
+                    >
+                        {isSidebarOpen ? <><PanelTopClose className="mr-2 h-4 w-4" /> Hide Tools</> : <><PanelTopOpen className="mr-2 h-4 w-4" /> Show Tools</>}
+                    </Button>
+                </div>
+
+                <main className="flex-grow flex flex-col lg:flex-row gap-5 h-full">
+                    {/* Sidebar (Collapsible on Mobile) */}
+                    <aside className={cn(
+                        "w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 overflow-hidden",
+                        isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden"
+                    )}>
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
-                            <button onClick={() => setSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all duration-300 shadow-md hover:shadow-lg">
-                                Go to Today
+                            <button onClick={() => setSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">
+                                Today
                             </button>
                             <div className="relative w-full">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                <input
-                                    type="search"
-                                    placeholder="Search entries..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300"
-                                />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <input type="search" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all" />
                             </div>
                         </div>
                         <Calendar onDateSelect={setSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
                         <Prompt dailyStats={dailyStats} />
 
-                        {!isPro && user && (
-                            <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
-                                <div className="flex items-center justify-between">
-                                    <Label className="flex flex-col space-y-1">
-                                        <span className="font-medium text-white">Journal Entries</span>
-                                        <span className="font-normal text-sm text-gray-400">{journalEntryCount} / 30 used</span>
-                                    </Label>
-                                    <Button asChild size="sm" className="bg-yellow-500 text-gray-900 hover:bg-yellow-400">
-                                        <Link href="/pricing">Upgrade</Link>
+                        {/* Usage Status */}
+                        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
+                            {!user ? (
+                                <div className="text-center">
+                                    <h3 className="font-bold text-white mb-1">Journal Entries</h3>
+                                    <p className="text-xs text-gray-400 mb-3">Sign in to save securely.</p>
+                                    <Button asChild size="sm" className="w-full bg-yellow-500 text-gray-900 hover:bg-yellow-400 font-bold">
+                                        <Link href="/login">Sign In</Link>
                                     </Button>
                                 </div>
-                                <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2">
-                                    <div className="bg-yellow-500 h-2.5 rounded-full" style={{ width: `${(journalEntryCount / 30) * 100}%` }}></div>
+                            ) : !isPro ? (
+                                <>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <Label className="font-medium text-white text-sm">Free Plan</Label>
+                                        <span className="text-xs text-gray-400">{journalEntryCount} / 30 entries</span>
+                                    </div>
+                                    <div className="w-full bg-gray-700 rounded-full h-2 mb-3">
+                                        <div className="bg-yellow-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(journalEntryCount / 30) * 100}%` }}></div>
+                                    </div>
+                                    <Button asChild size="sm" variant="outline" className="w-full border-yellow-500 text-yellow-400 hover:bg-yellow-500/10">
+                                        <Link href="/landing">Upgrade to Unlimited</Link>
+                                    </Button>
+                                </>
+                            ) : (
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Crown size={18} className="text-yellow-400" />
+                                        <span className="font-bold text-white text-sm">Unlimited Access</span>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-black bg-yellow-500 px-2 py-0.5 rounded-full uppercase tracking-wider">Pro</span>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </aside>
 
-                    {/* MODIFIED: Added wrapper div with click handler */}
-                    <div {...editorWrapperProps} className="flex-grow">
+                    {/* Main Editor Area */}
+                    <div {...editorWrapperProps} className="flex-grow min-h-[500px] lg:h-auto">
                         <JournalEditor
                             entry={entry}
                             onEntryChange={handleEntryChange}
                             dailyStats={dailyStats}
                             isPastDate={isPastDate}
+                            isFutureDate={isFutureDate}
                             isEditMode={isEditMode}
                             setIsEditMode={setIsEditMode}
                             isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
                             entryCount={journalEntryCount}
+                            onEntriesClick={() => setIsEntriesListOpen(true)}
+                            saveStatus={saveStatus}
+                            onNavigate={changeDate}
                         />
                     </div>
                 </main>

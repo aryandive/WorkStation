@@ -14,7 +14,7 @@ const showNotification = (title, body) => {
     if (Notification.permission === "granted") new Notification(title, { body });
 };
 
-// Define defaults outside the component to keep it clean
+// Define defaults
 const DEFAULT_SETTINGS = {
     workMinutes: 25,
     breakMinutes: 5,
@@ -27,11 +27,9 @@ const DEFAULT_SETTINGS = {
     volume: 0.8,
 };
 
-// --- The Main Timer Hook ---
 export default function usePomodoroTimer({ onSessionComplete }) {
-    // 1. Initialize with defaults
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-    const [isSettingsLoaded, setIsSettingsLoaded] = useState(false); // Guard to prevent overwriting local storage on init
+    const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
 
     const [mode, setMode] = useState('work');
     const [isRunning, setIsRunning] = useState(false);
@@ -41,20 +39,20 @@ export default function usePomodoroTimer({ onSessionComplete }) {
     const alarmRef = useRef(null);
     const endTimeRef = useRef(null);
 
+    // NEW: Track the initial duration of the current session to calculate elapsed time
+    const initialTimeRef = useRef(DEFAULT_SETTINGS.workMinutes * 60);
+
     useEffect(() => {
         onSessionCompleteRef.current = onSessionComplete;
     }, [onSessionComplete]);
 
-    // --- Persistence Logic ---
-    // A. Load settings on mount
+    // Load Settings
     useEffect(() => {
         if (typeof window !== 'undefined') {
             const saved = localStorage.getItem('pomodoro_settings');
             if (saved) {
                 try {
-                    const parsed = JSON.parse(saved);
-                    // Merge saved settings with defaults (handles new keys added in future updates)
-                    setSettings(prev => ({ ...prev, ...parsed }));
+                    setSettings(prev => ({ ...prev, ...JSON.parse(saved) }));
                 } catch (e) {
                     console.error("Failed to parse settings", e);
                 }
@@ -63,7 +61,7 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         }
     }, []);
 
-    // B. Save settings on change (only after initial load)
+    // Save Settings
     useEffect(() => {
         if (isSettingsLoaded && typeof window !== 'undefined') {
             localStorage.setItem('pomodoro_settings', JSON.stringify(settings));
@@ -81,7 +79,15 @@ export default function usePomodoroTimer({ onSessionComplete }) {
 
     const [timeLeft, setTimeLeft] = useState(getTimeForMode('work'));
 
-    // Audio Player Helper
+    // Update initialTimeRef whenever we switch modes or settings change (and timer is stopped)
+    useEffect(() => {
+        if (!isRunning) {
+            const time = getTimeForMode(mode);
+            setTimeLeft(time);
+            initialTimeRef.current = time; // Sync initial time
+        }
+    }, [mode, settings, getTimeForMode, isRunning]);
+
     const playAlarm = useCallback(() => {
         if (alarmRef.current) {
             alarmRef.current.src = `/sounds/${settings.alarmSound}`;
@@ -90,9 +96,16 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         }
     }, [settings.alarmSound, settings.volume]);
 
-    // Handle Session Completion logic
+    // --- Core Logic Update: Accurate Duration Calculation ---
     const handleSessionEnd = useCallback((wasSkipped = false) => {
         const sessionWasWork = mode === 'work';
+
+        // Calculate actual duration
+        // If skipped: (Start Time - Current Time Left)
+        // If finished: (Start Time)
+        const totalSeconds = initialTimeRef.current;
+        const elapsedSeconds = wasSkipped ? (totalSeconds - timeLeft) : totalSeconds;
+        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
 
         if (!wasSkipped) {
             playAlarm();
@@ -100,25 +113,41 @@ export default function usePomodoroTimer({ onSessionComplete }) {
                 const message = sessionWasWork ? "Time for a break!" : "Time to get back to focus!";
                 showNotification("Session Finished!", message);
             }
-            if (onSessionCompleteRef.current) {
-                onSessionCompleteRef.current({ sessionWasWork });
+        }
+
+        // Pass the calculated duration to the callback
+        if (onSessionCompleteRef.current) {
+            // Only report if at least 1 minute has passed
+            if (elapsedMinutes > 0) {
+                onSessionCompleteRef.current({
+                    sessionWasWork,
+                    duration: elapsedMinutes
+                });
             }
         }
 
         let nextMode = 'work';
-        if (sessionWasWork) {
+        if (sessionWasWork && !wasSkipped) {
             const newCompleted = completedSessions + 1;
             setCompletedSessions(newCompleted);
             nextMode = newCompleted > 0 && newCompleted % settings.longBreakInterval === 0 ? 'longBreak' : 'break';
+        } else if (sessionWasWork && wasSkipped) {
+            // If work was skipped, don't advance to break, stay on work (or user preference?)
+            // Usually, if you skip work, you might want to restart work or take a break. 
+            // Let's keep it on 'work' to let them retry, or 'break' if they gave up.
+            // For now, staying on 'work' is safer for accidental skips.
+            nextMode = 'work';
+        } else {
+            // If break was finished or skipped, go back to work
+            nextMode = 'work';
         }
 
-        const shouldAutoStart = (sessionWasWork && settings.autoStartBreaks) || (!sessionWasWork && settings.autoStartPomodoros);
-
-        setMode(nextMode);
-
-        // Setup next session
         const nextTime = getTimeForMode(nextMode);
+        setMode(nextMode);
         setTimeLeft(nextTime);
+        initialTimeRef.current = nextTime; // Reset initial time for next session
+
+        const shouldAutoStart = !wasSkipped && ((sessionWasWork && settings.autoStartBreaks) || (!sessionWasWork && settings.autoStartPomodoros));
 
         if (shouldAutoStart) {
             endTimeRef.current = Date.now() + nextTime * 1000;
@@ -127,17 +156,15 @@ export default function usePomodoroTimer({ onSessionComplete }) {
             setIsRunning(false);
         }
 
-    }, [mode, completedSessions, settings, playAlarm, getTimeForMode]);
+    }, [mode, timeLeft, completedSessions, settings, playAlarm, getTimeForMode]); // Added timeLeft dependency
 
-    // --- The Drift Fix (Timer Loop) ---
+    // Timer Loop
     useEffect(() => {
         let interval = null;
         if (isRunning && timeLeft > 0) {
             interval = setInterval(() => {
                 const now = Date.now();
                 const difference = endTimeRef.current - now;
-
-                // Calculate remaining seconds
                 const remainingSeconds = Math.max(0, Math.ceil(difference / 1000));
 
                 setTimeLeft(remainingSeconds);
@@ -151,17 +178,13 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         return () => clearInterval(interval);
     }, [isRunning, timeLeft, handleSessionEnd]);
 
-    // --- Title Sync (UX) ---
+    // Title Sync
     useEffect(() => {
         const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
         const seconds = (timeLeft % 60).toString().padStart(2, '0');
         const modeLabel = mode === 'work' ? 'Focus' : 'Break';
-
         document.title = `${minutes}:${seconds} - ${modeLabel} | Work Station`;
-
-        return () => {
-            document.title = "Work Station";
-        };
+        return () => { document.title = "Work Station"; };
     }, [timeLeft, mode]);
 
     useEffect(() => {
@@ -171,36 +194,24 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         }
     }, []);
 
-    // Update time when settings change (if timer is stopped)
-    // FIX APPLIED HERE: Removed 'isRunning' from dependency array
-    useEffect(() => {
-        if (!isRunning) {
-            setTimeLeft(getTimeForMode(mode));
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, settings.workMinutes, settings.breakMinutes, settings.longBreakMinutes, getTimeForMode]);
-
-
     const startTimer = () => {
         if (alarmRef.current && alarmRef.current.paused) {
             alarmRef.current.volume = 0;
             alarmRef.current.play().catch(() => { });
             alarmRef.current.volume = settings.volume || 1;
         }
-
         endTimeRef.current = Date.now() + timeLeft * 1000;
         setIsRunning(true);
     };
 
-    const pauseTimer = () => {
-        setIsRunning(false);
-    };
-
+    const pauseTimer = () => setIsRunning(false);
     const skipMode = () => handleSessionEnd(true);
 
     const resetTimer = () => {
         setIsRunning(false);
-        setTimeLeft(getTimeForMode(mode));
+        const time = getTimeForMode(mode);
+        setTimeLeft(time);
+        initialTimeRef.current = time;
     };
 
     const updateSettings = (newSettings) => {
@@ -208,8 +219,8 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         setSettings(prev => ({ ...prev, ...newSettings }));
     };
 
-    const totalTimeForMode = getTimeForMode(mode);
-    const progress = totalTimeForMode > 0 ? ((totalTimeForMode - timeLeft) / totalTimeForMode) * 100 : 0;
+    // Calculate progress based on INITIAL time, not dynamic getModeTime (which changes with settings)
+    const progress = initialTimeRef.current > 0 ? ((initialTimeRef.current - timeLeft) / initialTimeRef.current) * 100 : 0;
 
     return {
         timeLeft, isRunning, mode, progress, settings,
