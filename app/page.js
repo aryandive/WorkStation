@@ -1,6 +1,5 @@
-// Trigger vercel sync
 "use client";
- 
+
 import { useState, useRef } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -33,13 +32,14 @@ export default function PomodoroTimerPage() {
   const router = useRouter();
   const updateTaskTimeRef = useRef(null);
 
-  const isUiVisible = !(youtube.id && youtube.showPlayer) || isTopHovered || isBottomHovered;
+  // Logic: UI is visible if NOT playing video, OR if user is hovering over any UI zone
+  const isVideoMode = youtube.id && youtube.showPlayer;
+  const isUiVisible = !isVideoMode || isTopHovered || isBottomHovered || isFeatureNavHovered;
 
   // --- Funnel Logic ---
   const handleJournalClick = (e) => {
     e.preventDefault();
     if (!user) {
-      // **CHANGE**: Instead of opening a modal, redirect to the landing page.
       router.push('/landing');
     } else {
       router.push('/journal');
@@ -54,47 +54,59 @@ export default function PomodoroTimerPage() {
     { name: 'Journal', icon: '/journal.svg', isLink: true, href: '/journal', action: handleJournalClick },
   ];
 
-  // Define the class variables for UI animations.
-  const topUiElementClass = cn("transition-all duration-300 ease-in-out pointer-events-auto", !isUiVisible && "opacity-0 -translate-y-4");
-  const bottomUiElementClass = cn("transition-all duration-300 ease-in-out pointer-events-auto", !isUiVisible && "opacity-0 translate-y-4");
+  const fadeClass = cn(
+    "transition-opacity duration-500 ease-in-out",
+    isUiVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+  );
 
   return (
     <>
       <div className="relative h-screen overflow-hidden bg-black">
         <MasterPlayer />
 
-        {/* Hover zones to control UI visibility */}
+        {/* --- Top UI Zone --- 
+            Wraps both Left and Right Top UI. 
+            Padding provides the 'near' proximity trigger. 
+        */}
         <div
-          className="absolute top-0 left-0 right-0 h-32 z-20"
+          className="absolute top-0 left-0 right-0 z-30 p-6 flex justify-between items-start"
           onMouseEnter={() => setIsTopHovered(true)}
           onMouseLeave={() => setIsTopHovered(false)}
-        />
-        <div
-          className="absolute bottom-0 left-0 right-0 h-48 z-20"
-          onMouseEnter={() => setIsBottomHovered(true)}
-          onMouseLeave={() => setIsBottomHovered(false)}
-        />
-
-        <div className="absolute inset-0 z-30 pointer-events-none">
-          {/* FIX: This div now correctly uses topUiElementClass */}
-          <div className={cn("absolute left-4 top-4 flex flex-col gap-4", topUiElementClass)}>
+        >
+          {/* Top Left: Logo & Goal */}
+          <div className={cn("flex flex-col gap-4", fadeClass)}>
             <Image width={50} height={50} src="/logo.jpg" alt="Work Station Logo" className="rounded-md" />
             <div>
-              <h2 className='text-gray-300'>TODAY&apos;S FOCUS</h2>
-              <h1 className='text-2xl font-bold'>Focus Goal</h1>
+              <h2 className='text-gray-300 text-sm tracking-widest'>TODAY&apos;S FOCUS</h2>
+              <h1 className='text-2xl font-bold text-white'>Focus Goal</h1>
             </div>
-            <Button onClick={toggleGlobalPlay} variant="outline" size="icon" className="bg-black/20 border-white/20 hover:bg-white/20 text-white rounded-full">
+            <Button onClick={toggleGlobalPlay} variant="outline" size="icon" className="bg-black/20 border-white/20 hover:bg-white/20 text-white rounded-full backdrop-blur-sm">
               {isGlobalPlaying ? <Pause size={20} /> : <Play size={20} />}
             </Button>
           </div>
 
-          <div className={cn('absolute right-4 top-4 flex flex-col items-end gap-4', topUiElementClass)}>
+          {/* Top Right: Nav & Time */}
+          <div className={cn('flex flex-col items-end gap-4', fadeClass)}>
             <TopRightNav />
             <TimeWidget />
           </div>
+        </div>
 
+
+        {/* --- Bottom UI Zone --- */}
+        <div
+          className="absolute bottom-0 left-0 right-0 z-30 p-6"
+          onMouseEnter={() => setIsBottomHovered(true)}
+          onMouseLeave={() => setIsBottomHovered(false)}
+        >
+          {/* Center: Feature Navigation */}
           <div
-            className={cn("bottom w-full max-w-sm md:w-[30%] absolute flex justify-evenly items-center align-middle text-white pb-0 pt-2 left-1/2 -translate-x-1/2 gap-0 bottom-10 md:bottom-20 backdrop-blur-md rounded-full drop-shadow-xl", bottomUiElementClass)}
+            className={cn(
+              "absolute bottom-10 md:bottom-20 left-1/2 -translate-x-1/2",
+              "w-full max-w-sm md:w-[30%] flex justify-evenly items-center text-white pb-0 pt-2",
+              "backdrop-blur-md rounded-full drop-shadow-xl bg-black/20 border border-white/10",
+              fadeClass
+            )}
             onMouseEnter={() => setIsFeatureNavHovered(true)}
             onMouseLeave={() => setIsFeatureNavHovered(false)}
           >
@@ -112,11 +124,13 @@ export default function PomodoroTimerPage() {
             })}
           </div>
 
-          <div className={cn('absolute bottom-4 left-4', bottomUiElementClass)}>
+          {/* Bottom Left: Socials */}
+          <div className={cn('absolute bottom-6 left-6', fadeClass)}>
             <Social />
           </div>
 
-          <div className={cn("absolute bottom-4 right-4", bottomUiElementClass)}>
+          {/* Bottom Right: Logo/Menu */}
+          <div className={cn("absolute bottom-6 right-6", fadeClass)}>
             <div className="relative group inline-block">
               <Image src="/logo.jpg" alt="Logo" width={50} height={50} className="cursor-pointer rounded-md" />
               <div className="absolute bottom-full right-0 mb-2 w-48 bg-gray-800 text-white text-sm rounded-lg shadow-lg p-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-200 ease-out transform origin-bottom-right z-10">
@@ -132,12 +146,9 @@ export default function PomodoroTimerPage() {
           </div>
         </div>
 
-        {/* The sign-up modal can now be removed from this page if you wish,
-            as the primary funnel has changed. However, it can be kept for other
-            potential upgrade paths. I'll leave it for now. */}
         <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={closeSignUpModal} />
 
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto relative z-50">
           {isPomodoroOpen && <PomodoroTimer isOpen={isPomodoroOpen} setIsOpen={setIsPomodoroOpen} onTaskTimeUpdateRef={updateTaskTimeRef} />}
           {isTodoOpen && <TodoList isOpen={isTodoOpen} setIsOpen={setIsTodoOpen} onTaskTimeUpdateRef={updateTaskTimeRef} />}
           {isStatsOpen && <StatsPopup isOpen={isStatsOpen} setIsOpen={setIsStatsOpen} />}

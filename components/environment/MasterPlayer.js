@@ -27,6 +27,7 @@ export default function MasterPlayer() {
     useEffect(() => {
         if (videoRef.current) {
             if (isGlobalPlaying) {
+                // Only try to play if there is a valid source
                 if (videoRef.current.currentSrc || videoRef.current.src) {
                     videoRef.current.play().catch(e => console.error("Video play failed:", e));
                 }
@@ -36,7 +37,8 @@ export default function MasterPlayer() {
         }
     }, [isGlobalPlaying, activeScene]);
 
-    const videoSrc = activeScene.type === 'video' ? activeScene.path : undefined;
+    // FIX: Use null instead of "" to prevent browser from downloading the page as video
+    const videoSrc = activeScene.type === 'video' ? activeScene.path : null;
 
     const youtubeSrc = youtube.id
         ? `https://www.youtube.com/embed/${youtube.id}?autoplay=1&mute=${youtube.isMuted ? 1 : 0}&controls=${youtube.showControls ? 1 : 0}&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3&playsinline=1&loop=1&playlist=${youtube.id}&fs=0&cc_load_policy=0&disablekb=${youtube.showControls ? 0 : 1}`
@@ -79,9 +81,10 @@ export default function MasterPlayer() {
                 />
             )}
 
+            {/* FIX: key uses 'no-video' fallback to prevent null key, src passes null correctly */}
             <video
                 ref={videoRef}
-                key={videoSrc}
+                key={videoSrc || 'no-video'}
                 src={videoSrc}
                 className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ease-in-out"
                 autoPlay={isGlobalPlaying}
@@ -106,7 +109,6 @@ export default function MasterPlayer() {
                         allow="autoplay; encrypted-media; picture-in-picture"
                         allowFullScreen={false}
                         tabIndex={0}
-                        // The iframe is now always clickable, but the overlay will intercept clicks.
                         style={{
                             position: 'absolute',
                             top: '50%',
@@ -143,4 +145,3 @@ export default function MasterPlayer() {
         </div>
     );
 }
-

@@ -6,6 +6,9 @@ const EnvironmentContext = createContext(null);
 
 export function EnvironmentProvider({ children }) {
     const [activeScene, setActiveScene] = useState({ type: 'video', path: '/videos/cosy.mp4' });
+    // Track the scene used before YouTube started so we can restore it
+    const [lastActiveScene, setLastActiveScene] = useState(null);
+
     const [activeSounds, setActiveSounds] = useState([]);
     const [soundVolumes, setSoundVolumes] = useState({});
     const [youtube, setYoutube] = useState({ id: null, showPlayer: true, isMuted: true, showControls: false });
@@ -34,6 +37,7 @@ export function EnvironmentProvider({ children }) {
             setSoundVolumes(v => ({ ...v, [soundUrl]: volume }));
         };
 
+        // Note: Ideally move this to lib/utils.js to avoid duplication with EnvironmentPanel.js
         const getYoutubeId = (url) => {
             try {
                 const urlObj = new URL(url);
@@ -55,14 +59,22 @@ export function EnvironmentProvider({ children }) {
             const videoId = getYoutubeId(url);
             if (videoId) {
                 const { isCustom = false } = options;
+
+                // Save the current scene before switching to YouTube, if it's not already null
+                if (activeScene.type !== null) {
+                    setLastActiveScene(activeScene);
+                }
+
                 playScene({ type: null, path: null });
-                // If it's a curated video, force controls off. If custom, respect the user's current toggle state.
+
                 setYoutube(y => ({
                     ...y,
                     id: videoId,
                     showPlayer: true,
                     isMuted: true,
-                    showControls: isCustom ? y.showControls : false
+                    // If it's a custom video (user pasted), show controls by default. 
+                    // Otherwise keep previous state or default to hidden.
+                    showControls: isCustom ? true : false
                 }));
                 setIsGlobalPlaying(true);
                 return true;
@@ -72,7 +84,13 @@ export function EnvironmentProvider({ children }) {
 
         const stopYoutube = () => {
             setYoutube(y => ({ ...y, id: null }));
-            playScene({ type: 'video', path: '/videos/cosy.mp4' });
+
+            // Restore the previous scene if it exists, otherwise default to Cosy Room
+            if (lastActiveScene && lastActiveScene.path) {
+                playScene(lastActiveScene);
+            } else {
+                playScene({ type: 'video', path: '/videos/cosy.mp4' });
+            }
         };
 
         const setYoutubeShowPlayer = (show) => setYoutube(y => ({ ...y, showPlayer: show }));
@@ -82,10 +100,10 @@ export function EnvironmentProvider({ children }) {
 
         return {
             activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying,
-            playScene, toggleSound, changeVolume, playYoutube, stopYoutube, setYoutubeShowPlayer, setYoutubeMute, toggleGlobalPlay,
-            setYoutubeShowControls
+            playScene, toggleSound, changeVolume, playYoutube, stopYoutube,
+            setYoutubeShowPlayer, setYoutubeMute, toggleGlobalPlay, setYoutubeShowControls
         };
-    }, [activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying]);
+    }, [activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying, lastActiveScene]);
 
     return (
         <EnvironmentContext.Provider value={value}>
@@ -101,4 +119,3 @@ export function useEnvironment() {
     }
     return context;
 }
-
