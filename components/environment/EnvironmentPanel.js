@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import { useEnvironment } from '@/context/EnvironmentContext';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,22 +12,71 @@ import { Slider } from '@/components/ui/slider';
 import {
     X, Youtube, Video, Music, Volume2, VolumeX, ImageIcon, Info, Timer,
     CloudRain, Flame, Wind, Waves, CloudLightning, Trees, Radio, Sparkles, Moon,
-    Link as LinkIcon, Monitor, Play, MonitorPlay, Settings2,
-    Library, Bookmark, Trash2, Plus, Loader2, FolderHeart
+    Link as LinkIcon, Monitor, Play, MonitorPlay, Settings2, Bookmark, Trash2, Loader2,
+    ChevronDown, ChevronUp, LayoutGrid, Image as LucideImage, Plus, HardDrive
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getYoutubeId } from '@/lib/utils';
 import { createClient } from '@/utils/supabase/client';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ANIMATED_SCENES, STATIC_CATEGORIES, STATIC_IMAGES } from '@/lib/environmentConfig';
 
-// Fallback helper
+// --- IndexedDB Helpers (Simple Storage) ---
+const DB_NAME = 'EnvironmentAssetsDB';
+const DB_VERSION = 1;
+
+const initDB = () => {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, DB_VERSION);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            if (!db.objectStoreNames.contains('custom_videos')) db.createObjectStore('custom_videos', { keyPath: 'id' });
+            if (!db.objectStoreNames.contains('custom_images')) db.createObjectStore('custom_images', { keyPath: 'id' });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+const saveToDB = async (storeName, item) => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        store.put(item);
+        tx.oncomplete = () => resolve(item);
+        tx.onerror = () => reject(tx.error);
+    });
+};
+
+const getAllFromDB = async (storeName) => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const request = store.getAll();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+};
+
+const deleteFromDB = async (storeName, id) => {
+    const db = await initDB();
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(storeName, 'readwrite');
+        const store = tx.objectStore(storeName);
+        store.delete(id);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+};
+
+// --- Helper Functions ---
 function localGetYoutubeId(url) {
     try {
         const u = new URL(url);
         const host = u.hostname;
-        if (host.includes('youtu.be')) {
-            return u.pathname.split('/').filter(Boolean)[0] || null;
-        }
+        if (host.includes('youtu.be')) return u.pathname.split('/').filter(Boolean)[0] || null;
         if (host.includes('youtube.com')) {
             if (u.searchParams.get('v')) return u.searchParams.get('v');
             const path = u.pathname.split('/').filter(Boolean);
@@ -38,31 +87,7 @@ function localGetYoutubeId(url) {
     return null;
 }
 
-const scenes = [
-    { name: 'Cosy Room', type: 'video', path: '/videos/cosy.mp4', thumbnail: '/Images/thumbnails/cosy-room.jpg' },
-    { name: 'New Video', type: 'video', path: '/videos/video1.mp4', thumbnail: '/Images/thumbnails/video1.jpg' },
-];
-const images = [
-    { name: 'Forest Path', type: 'image', path: '/Images/lion.jpg', thumbnail: '/Images/thumbnails/lion.jpg' },
-    { name: 'Night Sky', type: 'image', path: '/Images/mountain.jpg', thumbnail: '/Images/thumbnails/mountain.jpg' },
-];
-
-// UPDATED LIST (11 Items now)
-const curatedYoutube = [
-    { name: 'Lofi Hip Hop', url: 'https://www.youtube.com/watch?v=sAkVnhthpMI', thumbnail: 'https://img.youtube.com/vi/sAkVnhthpMI/mqdefault.jpg' },
-    { name: 'Ambient Space', url: 'https://www.youtube.com/watch?v=0nTO4zSEpOs', thumbnail: 'https://img.youtube.com/vi/0nTO4zSEpOs/mqdefault.jpg' },
-    { name: 'Rainy Cafe', url: 'https://www.youtube.com/watch?v=Ze42hH2GzHc', thumbnail: 'https://img.youtube.com/vi/Ze42hH2GzHc/mqdefault.jpg' },
-    { name: 'Forest Sounds', url: 'https://www.youtube.com/watch?v=QZl_HuHjfnQ', thumbnail: 'https://img.youtube.com/vi/QZl_HuHjfnQ/mqdefault.jpg' },
-    { name: 'Cozy Rain Library', url: 'https://youtu.be/qe3l1rvJMlA?si=P9rZLhDHygoh3bC0', thumbnail: 'https://img.youtube.com/vi/qe3l1rvJMlA/mqdefault.jpg' },
-    { name: 'Magical Library', url: 'https://youtu.be/t822he3vtLE?si=Y-fm_Toe9c76A6hJ', thumbnail: 'https://img.youtube.com/vi/t822he3vtLE/mqdefault.jpg' },
-    { name: 'Night Cafe', url: 'https://youtu.be/mXpLHdYhMKA?si=MiyYNGoPed9nSmbs', thumbnail: 'https://img.youtube.com/vi/mXpLHdYhMKA/mqdefault.jpg' },
-    { name: 'Lofi Girl Radio', url: 'https://www.youtube.com/live/qlSWhX_4slI?si=JS2hUuiujfv_YNXj', thumbnail: 'https://img.youtube.com/vi/qlSWhX_4slI/mqdefault.jpg' },
-    // 3 NEW REQUESTED VIDEOS
-    { name: 'Valley of Dreams', url: 'https://youtu.be/e5pGt1-Wy04?si=NpwZGbU0JFQWiE8n', thumbnail: 'https://img.youtube.com/vi/e5pGt1-Wy04/mqdefault.jpg' },
-    { name: 'Lofi Cat', url: 'https://youtu.be/sR6tjNq8Ywk?si=bJ78cnu5b_Zv0EHh', thumbnail: 'https://img.youtube.com/vi/sR6tjNq8Ywk/mqdefault.jpg' },
-    { name: 'Deep Focus', url: 'https://youtu.be/sUwD3GRPJos?si=HzK87cFUtVqTq4Eu', thumbnail: 'https://img.youtube.com/vi/sUwD3GRPJos/mqdefault.jpg' },
-];
-
+// --- Constants ---
 const soundscapes = [
     { name: 'Rain', path: '/sounds/rain.mp3', icon: CloudRain },
     { name: 'Fireplace', path: '/sounds/fireplace.mp3', icon: Flame },
@@ -74,7 +99,19 @@ const soundscapes = [
     { name: 'Night', path: '/sounds/night.mp3', icon: Moon },
 ];
 
+const curatedYoutube = [
+    { name: 'Lofi Hip Hop', url: 'https://www.youtube.com/watch?v=sAkVnhthpMI', thumbnail: 'https://img.youtube.com/vi/sAkVnhthpMI/mqdefault.jpg' },
+    { name: 'Ambient Space', url: 'https://www.youtube.com/watch?v=0nTO4zSEpOs', thumbnail: 'https://img.youtube.com/vi/0nTO4zSEpOs/mqdefault.jpg' },
+    { name: 'Rainy Cafe', url: 'https://www.youtube.com/watch?v=Ze42hH2GzHc', thumbnail: 'https://img.youtube.com/vi/Ze42hH2GzHc/mqdefault.jpg' },
+    { name: 'Forest Sounds', url: 'https://www.youtube.com/watch?v=QZl_HuHjfnQ', thumbnail: 'https://img.youtube.com/vi/QZl_HuHjfnQ/mqdefault.jpg' },
+    { name: 'Cozy Rain Library', url: 'https://youtu.be/qe3l1rvJMlA?si=P9rZLhDHygoh3bC0', thumbnail: 'https://img.youtube.com/vi/qe3l1rvJMlA/mqdefault.jpg' },
+    { name: 'Magical Library', url: 'https://youtu.be/t822he3vtLE?si=Y-fm_Toe9c76A6hJ', thumbnail: 'https://img.youtube.com/vi/t822he3vtLE/mqdefault.jpg' },
+    { name: 'Deep Focus', url: 'https://youtu.be/sUwD3GRPJos?si=HzK87cFUtVqTq4Eu', thumbnail: 'https://img.youtube.com/vi/sUwD3GRPJos/mqdefault.jpg' },
+];
+
 const MAX_SAVED_VIDEOS = 10;
+const MAX_CUSTOM_SCENES = 5;
+const MAX_CUSTOM_IMAGES = 12;
 
 export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     const {
@@ -82,19 +119,49 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
         playScene, toggleSound, changeVolume, playYoutube, stopYoutube,
         setYoutubeShowPlayer, setYoutubeMute, setYoutubeShowControls
     } = useEnvironment();
+    
     const [activeTab, setActiveTab] = useState('scenes');
     const [youtubeUrl, setYoutubeUrl] = useState('');
     const [youtubeError, setYoutubeError] = useState('');
     
-    // LIBRARY STATE
+    // --- Scenes Tab State ---
+    const [isAnimatedExpanded, setIsAnimatedExpanded] = useState(false);
+    const [activeImageCategory, setActiveImageCategory] = useState('all');
+    
+    // --- Custom Local Assets State ---
+    const [customScenes, setCustomScenes] = useState([]);
+    const [customImages, setCustomImages] = useState([]);
+    const [isUploading, setIsUploading] = useState(false);
+
+    // --- Library State (For YouTube Tab) ---
     const [savedVideos, setSavedVideos] = useState([]);
-    const [isLibraryOpen, setIsLibraryOpen] = useState(false); // Controls visibility
     const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    
     const supabase = createClient();
 
-    // Fetch Library
+    // Load Local Custom Assets on Mount
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            const loadAssets = async () => {
+                try {
+                    const scenes = await getAllFromDB('custom_videos');
+                    const images = await getAllFromDB('custom_images');
+                    
+                    // Create Object URLs for preview
+                    const scenesWithUrls = scenes.map(s => ({ ...s, url: URL.createObjectURL(s.blob) }));
+                    const imagesWithUrls = images.map(i => ({ ...i, url: URL.createObjectURL(i.blob) }));
+                    
+                    setCustomScenes(scenesWithUrls);
+                    setCustomImages(imagesWithUrls);
+                } catch (e) {
+                    console.error("Failed to load local assets:", e);
+                }
+            };
+            loadAssets();
+        }
+    }, []);
+
+    // Fetch Library (Only if YouTube tab is active)
     const fetchLibrary = useCallback(async () => {
         setIsLoadingLibrary(true);
         const { data: { user } } = await supabase.auth.getUser();
@@ -116,14 +183,88 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
         }
     }, [isOpen, activeTab, fetchLibrary]);
 
+    // --- Asset Upload Handlers ---
+    const handleSceneUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (customScenes.length >= MAX_CUSTOM_SCENES) return;
+
+        if (!file.type.startsWith('video/')) {
+            alert('Please select a video file.');
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            const newAsset = {
+                id: `scene_${Date.now()}`,
+                blob: file,
+                name: file.name,
+                created: Date.now()
+            };
+            await saveToDB('custom_videos', newAsset);
+            
+            const url = URL.createObjectURL(file);
+            setCustomScenes(prev => [...prev, { ...newAsset, url }]);
+        } catch (error) {
+            console.error("Upload failed", error);
+            alert("Failed to save video. Storage might be full.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (customImages.length >= MAX_CUSTOM_IMAGES) return;
+
+        if (!file.type.startsWith('image/')) {
+            alert('Please select an image file.');
+            return;
+        }
+
+        setIsUploading(true);
+        try {
+            const newAsset = {
+                id: `img_${Date.now()}`,
+                blob: file,
+                name: file.name,
+                created: Date.now()
+            };
+            await saveToDB('custom_images', newAsset);
+            
+            const url = URL.createObjectURL(file);
+            setCustomImages(prev => [...prev, { ...newAsset, url }]);
+        } catch (error) {
+            console.error("Upload failed", error);
+            alert("Failed to save image.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+    const handleDeleteCustom = async (type, id) => {
+        try {
+            // Delete from IndexedDB first
+            if (type === 'video') {
+                await deleteFromDB('custom_videos', id);
+                setCustomScenes(prev => prev.filter(i => i.id !== id));
+            } else {
+                await deleteFromDB('custom_images', id);
+                setCustomImages(prev => prev.filter(i => i.id !== id));
+            }
+        } catch (e) {
+            console.error("Delete failed", e);
+        }
+    };
+
+    // --- Handlers for YouTube ---
     const handleYoutubePlay = (url) => {
         setYoutubeError('');
         const success = playYoutube(url, { isCustom: true });
-        if (success) {
-            setYoutubeUrl('');
-        } else {
-            setYoutubeError('Invalid YouTube URL.');
-        }
+        if (success) setYoutubeUrl('');
+        else setYoutubeError('Invalid YouTube URL.');
     };
 
     const handleSaveToLibrary = async () => {
@@ -131,29 +272,23 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
             setYoutubeError(`Limit reached (${MAX_SAVED_VIDEOS}). Delete videos to save more.`);
             return;
         }
-
         const videoId = typeof getYoutubeId === 'function' ? getYoutubeId(youtubeUrl) : localGetYoutubeId(youtubeUrl);
         if (!videoId) {
             setYoutubeError('Invalid YouTube URL.');
             return;
         }
-
         setIsSaving(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) {
                 setYoutubeError('Sign in to save videos.');
-                setIsSaving(false);
                 return;
             }
-
             const exists = savedVideos.some(v => v.video_id === videoId);
             if (exists) {
                 setYoutubeError('Already in library.');
-                setIsSaving(false);
                 return;
             }
-
             const newVideo = {
                 user_id: user.id,
                 video_id: videoId,
@@ -161,14 +296,12 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                 title: `Custom Video ${savedVideos.length + 1}`, 
                 thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
             };
-
             const { data, error } = await supabase.from('user_videos').insert([newVideo]).select();
             if (error) throw error;
             if (data) {
                 setSavedVideos(prev => [data[0], ...prev]);
                 setYoutubeUrl('');
                 setYoutubeError('');
-                setIsLibraryOpen(true); // Auto-open library on save
             }
         } catch (error) {
             console.error("Error saving:", error);
@@ -186,54 +319,206 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
         }
     };
 
+    // Filter Static Images
+    const filteredImages = activeImageCategory === 'custom'
+        ? customImages
+        : activeImageCategory === 'all'
+            ? STATIC_IMAGES
+            : STATIC_IMAGES.filter(img => img.category === activeImageCategory);
+
+    // Combine Default Animated Scenes with Custom Scenes
+    const allAnimatedScenes = [
+        ...ANIMATED_SCENES.map(s => ({ ...s, type: 'youtube-scene' })),
+        ...customScenes.map(s => ({ ...s, type: 'video', thumbnail: null }))
+    ];
+
+    const displayedAnimatedScenes = isAnimatedExpanded ? allAnimatedScenes : allAnimatedScenes.slice(0, 4);
+
+    // Categories List with Custom at the end
+    const categoriesList = [...STATIC_CATEGORIES, { id: 'custom', label: 'Custom' }];
+
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogContent className="bg-gray-900/80 backdrop-blur-md border-gray-700 text-white max-w-3xl max-h-[85vh] overflow-y-auto">
-                <DialogHeader><DialogTitle className="text-2xl font-bold text-yellow-400">Environment</DialogTitle></DialogHeader>
+            <DialogContent className="bg-gray-900/80 backdrop-blur-md border-gray-700 text-white max-w-4xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle className="text-2xl font-bold text-yellow-400">Environment</DialogTitle>
+                    <DialogDescription className="text-gray-400">Customize your focus space.</DialogDescription>
+                </DialogHeader>
 
+                {/* --- Top Nav Tabs --- */}
                 <div className="border-b border-gray-700 sticky top-0 bg-gray-900/95 z-10 pt-2">
                     <nav className="-mb-px flex space-x-6" aria-label="Tabs">
-                        <button onClick={() => setActiveTab('scenes')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'scenes' ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}><Video size={16} /> Scenes</button>
-                        <button onClick={() => setActiveTab('youtube')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'youtube' ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}><Youtube size={16} /> YouTube</button>
-                        <button onClick={() => setActiveTab('soundscapes')} className={`flex items-center gap-2 whitespace-nowrap py-3 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'soundscapes' ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500'}`}><Music size={16} /> Soundscapes</button>
+                        <button onClick={() => setActiveTab('scenes')} className={cn("flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors", activeTab === 'scenes' ? "border-yellow-400 text-yellow-400" : "border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500")}><Video size={16} /> Scenes</button>
+                        <button onClick={() => setActiveTab('youtube')} className={cn("flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors", activeTab === 'youtube' ? "border-yellow-400 text-yellow-400" : "border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500")}><Youtube size={16} /> YouTube</button>
+                        <button onClick={() => setActiveTab('soundscapes')} className={cn("flex items-center gap-2 py-3 px-1 border-b-2 font-medium text-sm transition-colors", activeTab === 'soundscapes' ? "border-yellow-400 text-yellow-400" : "border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-500")}><Music size={16} /> Soundscapes</button>
                     </nav>
                 </div>
 
                 <div className="py-4 min-h-[300px]">
+                    
+                    {/* --- TAB 1: SCENES --- */}
                     {activeTab === 'scenes' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            
+                            {/* 1. Animated Scenes Section */}
                             <div>
-                                <h4 className="font-semibold text-gray-300 mb-3 flex items-center gap-2"><Video size={16} /> Animated Scenes</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {scenes.map(s => (<SceneButton key={s.path} scene={s} isActive={activeScene.path === s.path} onClick={() => playScene(s)} />))}
+                                <div className="flex items-center justify-between mb-4">
+                                    <h4 className="font-semibold text-gray-300 flex items-center gap-2">
+                                        <Video size={18} className="text-yellow-400" /> Animated Scenes
+                                    </h4>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        onClick={() => setIsAnimatedExpanded(!isAnimatedExpanded)}
+                                        className="text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10"
+                                    >
+                                        {isAnimatedExpanded ? (
+                                            <span className="flex items-center gap-1">Collapse <ChevronUp size={14} /></span>
+                                        ) : (
+                                            <span className="flex items-center gap-1">Expand Library <ChevronDown size={14} /></span>
+                                        )}
+                                    </Button>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {displayedAnimatedScenes.map(scene => (
+                                        <div key={scene.id} className="relative group">
+                                            <SceneButton
+                                                scene={scene}
+                                                isActive={(scene.videoId && activeScene.videoId === scene.videoId) || (scene.url && activeScene.path === scene.url)}
+                                                onClick={() => {
+                                                    if (scene.type === 'youtube-scene') {
+                                                        playScene({ type: 'youtube-scene', videoId: scene.videoId, path: null });
+                                                    } else {
+                                                        playScene({ type: 'video', path: scene.url });
+                                                    }
+                                                }}
+                                            />
+                                            {/* Delete Button for Custom Scenes */}
+                                            {scene.type === 'video' && (
+                                                 <button 
+                                                    onClick={(e) => handleDeleteCustom('video', scene.id)}
+                                                    className="absolute top-1 right-1 p-1.5 bg-red-600/90 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                    {/* IMPORT CARD (Tooltip on Hover) */}
+                                    {isAnimatedExpanded && customScenes.length < MAX_CUSTOM_SCENES && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-yellow-400 hover:text-yellow-400 hover:bg-gray-800 transition-all aspect-[16/9]">
+                                                        {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
+                                                        <span className="text-xs font-medium">Import Video</span>
+                                                        <span className="text-[10px] opacity-70">Max 5</span>
+                                                        <input type="file" accept="video/*" className="hidden" onChange={handleSceneUpload} disabled={isUploading} />
+                                                    </label>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs">
+                                                    <p>Local videos are stored in your browser. Clearing history/cookies will remove them.</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    )}
                                 </div>
                             </div>
+
+                            {/* 2. Static Images Section */}
                             <div>
-                                <h4 className="font-semibold text-gray-300 mb-3 flex items-center gap-2"><ImageIcon size={16} /> Static Images</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                                    {images.map(img => (<SceneButton key={img.path} scene={img} isActive={activeScene.path === img.path} onClick={() => playScene(img)} />))}
+                                <h4 className="font-semibold text-gray-300 flex items-center gap-2 mb-4">
+                                    <LucideImage size={18} className="text-blue-400" /> Static Backgrounds
+                                </h4>
+
+                                {/* Category Filters */}
+                                <div className="flex overflow-x-auto pb-4 gap-2 no-scrollbar mask-gradient">
+                                    {categoriesList.map(cat => (
+                                        <Button
+                                            key={cat.id}
+                                            variant={activeImageCategory === cat.id ? "default" : "outline"}
+                                            size="sm"
+                                            onClick={() => setActiveImageCategory(cat.id)}
+                                            className={cn(
+                                                "whitespace-nowrap rounded-full px-4 transition-all",
+                                                activeImageCategory === cat.id 
+                                                    ? "bg-yellow-400 text-black hover:bg-yellow-500 border-transparent"
+                                                    : "border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 bg-transparent"
+                                            )}
+                                        >
+                                            {cat.label}
+                                        </Button>
+                                    ))}
+                                </div>
+
+                                {/* Static Images Grid */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {/* Custom Upload Card - Tooltip on Hover */}
+                                    {activeImageCategory === 'custom' && customImages.length < MAX_CUSTOM_IMAGES && (
+                                        <TooltipProvider>
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-blue-400 hover:text-blue-400 hover:bg-gray-800 transition-all aspect-[16/9]">
+                                                        {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
+                                                        <span className="text-xs font-medium">Import Image</span>
+                                                        <span className="text-[10px] opacity-70">Max 12</span>
+                                                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
+                                                    </label>
+                                                </TooltipTrigger>
+                                                <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs">
+                                                    <p>Local images are stored in your browser. Clearing history/cookies will remove them.</p>
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        </TooltipProvider>
+                                    )}
+
+                                    {/* Render Images */}
+                                    {(activeImageCategory === 'custom' ? customImages : filteredImages).map((img, idx) => (
+                                        <div key={img.id || idx} className="relative group">
+                                            <SceneButton
+                                                scene={{ 
+                                                    ...img, 
+                                                    type: 'image', 
+                                                    thumbnail: activeImageCategory === 'custom' ? img.url : img.src 
+                                                }}
+                                                isActive={activeScene.path === (activeImageCategory === 'custom' ? img.url : img.src)}
+                                                onClick={() => playScene({ type: 'image', path: activeImageCategory === 'custom' ? img.url : img.src })}
+                                            />
+                                            {/* Delete Button for Custom Images */}
+                                            {activeImageCategory === 'custom' && (
+                                                 <button 
+                                                    onClick={(e) => handleDeleteCustom('image', img.id)}
+                                                    className="absolute top-1 right-1 p-1.5 bg-red-600/90 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
                     )}
 
+                    {/* --- TAB 2: YOUTUBE (Preserved) --- */}
                     {activeTab === 'youtube' && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            {/* Pro Tip Banner */}
-                            <div className="bg-gradient-to-r from-red-900/30 to-orange-900/30 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
+                             {/* Pro Tip Banner */}
+                             <div className="bg-gradient-to-r from-red-900/30 to-orange-900/30 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
                                 <div className="p-2 bg-red-500/10 rounded-lg">
                                     <MonitorPlay className="w-5 h-5 text-red-400" />
                                 </div>
                                 <div className="text-sm text-gray-300">
                                     <h4 className="font-semibold text-white mb-1">Study Mode</h4>
-                                    <p className="opacity-90">Paste a lecture or tutorial link below. Enable <strong>Controls</strong> to pause/rewind.</p>
+                                    <p className="opacity-90">Paste a lecture or tutorial link below. You can enable <strong>Video Controls</strong> to pause/rewind.</p>
                                 </div>
                             </div>
 
                             <div>
                                 <h4 className="font-semibold text-gray-300 mb-3">Curated Playlists</h4>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {/* Render Curated Videos */}
                                     {curatedYoutube.map(yt => {
                                         const id = typeof getYoutubeId === 'function' ? getYoutubeId(yt.url) : localGetYoutubeId(yt.url);
                                         return (
@@ -245,76 +530,34 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             />
                                         );
                                     })}
-
-                                    {/* 12th ITEM: Your Library Toggle Button */}
+                                    
                                     <button
-                                        onClick={() => setIsLibraryOpen(prev => !prev)}
-                                        className={cn(
-                                            "rounded-lg border-2 border-dashed transition-all group flex flex-col items-center justify-center relative aspect-[16/9] hover:bg-gray-800",
-                                            isLibraryOpen ? "border-yellow-400 bg-gray-800" : "border-gray-700"
-                                        )}
+                                        onClick={() => {
+                                            const librarySection = document.getElementById('custom-library-section');
+                                            if (librarySection) librarySection.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                        className="rounded-lg border-2 border-dashed border-gray-700 transition-all group flex flex-col items-center justify-center relative aspect-[16/9] hover:bg-gray-800"
                                     >
-                                        <div className={cn("p-3 rounded-full mb-2 transition-colors", isLibraryOpen ? "bg-yellow-400 text-black" : "bg-gray-800 text-gray-400 group-hover:bg-gray-700")}>
-                                            <FolderHeart size={24} />
+                                        <div className="p-3 rounded-full mb-2 bg-gray-800 text-gray-400 group-hover:bg-gray-700 transition-colors">
+                                            <Bookmark size={24} />
                                         </div>
-                                        <p className={cn("text-xs font-medium", isLibraryOpen ? "text-yellow-400" : "text-gray-400 group-hover:text-white")}>
-                                            Your Library
-                                        </p>
+                                        <p className="text-xs font-medium text-gray-400 group-hover:text-white">Scroll to Library</p>
                                     </button>
                                 </div>
                             </div>
 
-                            {/* CONDITIONAL LIBRARY SECTION */}
-                            {isLibraryOpen && (
-                                <div className="animate-in fade-in slide-in-from-top-4 duration-300">
-                                    <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-700">
-                                        <div className="flex items-center justify-between mb-4">
-                                            <h4 className="font-semibold text-yellow-400 flex items-center gap-2">
-                                                <Bookmark size={16} /> Saved Videos
-                                            </h4>
-                                            <span className={cn("text-xs px-2 py-0.5 rounded-full border", 
-                                                savedVideos.length >= MAX_SAVED_VIDEOS ? "border-red-500 text-red-400" : "border-gray-700 text-gray-400"
-                                            )}>
-                                                {savedVideos.length} / {MAX_SAVED_VIDEOS}
-                                            </span>
-                                        </div>
-
-                                        {isLoadingLibrary ? (
-                                            <div className="flex justify-center p-8 text-gray-500"><Loader2 className="animate-spin" /></div>
-                                        ) : savedVideos.length > 0 ? (
-                                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                                {savedVideos.map(vid => (
-                                                    <div key={vid.id} className="relative group">
-                                                        {/* FIX: Mapped title to name here */}
-                                                        <SceneButton
-                                                            scene={{ ...vid, name: vid.title, type: 'youtube' }}
-                                                            isActive={youtube.id === vid.video_id}
-                                                            onClick={() => playYoutube(vid.url, { isCustom: false })}
-                                                        />
-                                                        <button 
-                                                            onClick={(e) => handleDeleteFromLibrary(vid.id, e)}
-                                                            className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-red-600/90 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all duration-200"
-                                                            title="Remove from library"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <div className="text-center py-8 border border-dashed border-gray-700 rounded-xl">
-                                                <p className="text-gray-500 text-sm">Library is empty. Paste a URL below to save.</p>
-                                            </div>
-                                        )}
-                                    </div>
+                            {/* Custom Video & Library Section */}
+                            <div id="custom-library-section" className="pt-4 border-t border-gray-700">
+                                <div className="flex items-center justify-between mb-3">
+                                    <h4 className="font-semibold text-gray-300 flex items-center gap-2">
+                                        <LinkIcon size={16} /> Custom Video Source
+                                    </h4>
+                                    <span className={cn("text-xs px-2 py-0.5 rounded-full border", 
+                                        savedVideos.length >= MAX_SAVED_VIDEOS ? "border-red-500 text-red-400" : "border-gray-700 text-gray-400"
+                                    )}>
+                                        Library: {savedVideos.length} / {MAX_SAVED_VIDEOS}
+                                    </span>
                                 </div>
-                            )}
-
-                            {/* Custom Video Input Section */}
-                            <div className="pt-4 border-t border-gray-700">
-                                <h4 className="font-semibold text-gray-300 flex items-center gap-2 mb-3">
-                                    <LinkIcon size={16} /> Custom Video Source
-                                </h4>
 
                                 <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700 space-y-4">
                                     <div className="flex gap-2">
@@ -341,9 +584,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                     </Button>
                                                 </TooltipTrigger>
                                                 {savedVideos.length >= MAX_SAVED_VIDEOS && (
-                                                    <TooltipContent>
-                                                        <p>Limit Reached</p>
-                                                    </TooltipContent>
+                                                    <TooltipContent><p>Limit Reached</p></TooltipContent>
                                                 )}
                                             </Tooltip>
                                         </TooltipProvider>
@@ -354,7 +595,32 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                     </div>
                                     {youtubeError && <p className="text-xs text-red-400 px-1">{youtubeError}</p>}
 
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 bg-gray-900/50 rounded-lg">
+                                    {/* Saved Library Grid */}
+                                    {savedVideos.length > 0 && (
+                                        <div className="mt-4 pt-4 border-t border-gray-700/50">
+                                            <h5 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Your Saved Videos</h5>
+                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                {savedVideos.map(vid => (
+                                                    <div key={vid.id} className="relative group">
+                                                        <SceneButton
+                                                            scene={{ ...vid, name: vid.title, type: 'youtube' }}
+                                                            isActive={youtube.id === vid.video_id}
+                                                            onClick={() => playYoutube(vid.url, { isCustom: false })}
+                                                        />
+                                                        <button 
+                                                            onClick={(e) => handleDeleteFromLibrary(vid.id, e)}
+                                                            className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-red-600/90 text-white rounded opacity-0 group-hover:opacity-100 transition-all"
+                                                        >
+                                                            <Trash2 size={12} />
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* YouTube Controls */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 bg-gray-900/50 rounded-lg mt-2">
                                         <div className="flex items-center justify-between gap-2 px-2">
                                             <div className="flex items-center gap-2 text-sm text-gray-400">
                                                 <Monitor size={16} /> <Label htmlFor="show-player" className="cursor-pointer">Video</Label>
@@ -389,25 +655,19 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                         </div>
                     )}
 
+                    {/* --- TAB 3: SOUNDSCAPES (Preserved) --- */}
                     {activeTab === 'soundscapes' && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            {/* Mix & Match Tip Section */}
                             <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
                                 <div className="p-2 bg-blue-500/10 rounded-lg">
                                     <Sparkles className="w-5 h-5 text-blue-400" />
                                 </div>
                                 <div className="text-sm text-gray-300">
                                     <h4 className="font-semibold text-white mb-1">Create Your Atmosphere</h4>
-                                    <p className="mb-2">Combine sounds and scenes to maximize your experience:</p>
-                                    <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs opacity-90">
-                                        <li className="flex items-center gap-2">🔥 <span className="font-medium">Fire</span> + 🌲 <span className="font-medium">Nature</span> = <span className="text-yellow-300">Jungle Campfire</span></li>
-                                        <li className="flex items-center gap-2">⛈️ <span className="font-medium">Thunder</span> + 🌧️ <span className="font-medium">Rain</span> + 🏠 <span className="text-purple-300">Cozy Room Video</span></li>
-                                        <li className="flex items-center gap-2">🌊 <span className="font-medium">Waves</span> + 💨 <span className="font-medium">Wind</span> = <span className="text-blue-300">Ocean Breeze</span></li>
-                                    </ul>
+                                    <p className="mb-2">Combine sounds and scenes to maximize your experience.</p>
                                 </div>
                             </div>
 
-                            {/* Sound Grid */}
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                                 {soundscapes.map(sound => {
                                     const isActive = activeSounds.includes(sound.path);
@@ -419,32 +679,22 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             key={sound.path}
                                             className={cn(
                                                 "relative group rounded-xl border-2 transition-all duration-300 overflow-hidden",
-                                                isActive
-                                                    ? "border-yellow-400 bg-yellow-950/20"
-                                                    : "border-gray-700 bg-gray-800/40 hover:border-gray-500 hover:bg-gray-800"
+                                                isActive ? "border-yellow-400 bg-yellow-950/20" : "border-gray-700 bg-gray-800/40 hover:border-gray-500 hover:bg-gray-800"
                                             )}
                                         >
                                             <button
                                                 onClick={() => toggleSound(sound.path)}
                                                 className="w-full p-4 flex flex-col items-center gap-3 text-center"
                                             >
-                                                <div className={cn(
-                                                    "p-3 rounded-full transition-colors",
-                                                    isActive ? "bg-yellow-400 text-black" : "bg-gray-700 text-gray-400 group-hover:text-white"
-                                                )}>
+                                                <div className={cn("p-3 rounded-full transition-colors", isActive ? "bg-yellow-400 text-black" : "bg-gray-700 text-gray-400 group-hover:text-white")}>
                                                     <Icon size={24} />
                                                 </div>
-                                                <span className={cn(
-                                                    "text-sm font-medium",
-                                                    isActive ? "text-yellow-400" : "text-gray-400 group-hover:text-gray-200"
-                                                )}>
+                                                <span className={cn("text-sm font-medium", isActive ? "text-yellow-400" : "text-gray-400 group-hover:text-gray-200")}>
                                                     {sound.name}
                                                 </span>
                                             </button>
-
-                                            {/* Volume Slider - Slides up when active */}
                                             <div className={cn(
-                                                "px-4 pb-4 pt-0 transition-all duration-300 origin-top",
+                                                "px-4 pb-4 transition-all duration-300",
                                                 isActive ? "opacity-100 max-h-20" : "opacity-0 max-h-0 overflow-hidden"
                                             )}>
                                                 <div className="flex items-center gap-2">
@@ -471,15 +721,66 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     );
 }
 
-// FIX: Added '|| "Scene"' fallback to alt prop to prevent undefined error
 function SceneButton({ scene, isActive, onClick }) {
+    // Protection Handler
+    const preventTheft = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    };
+
+    // Helper to render media content safely
+    const renderMedia = () => {
+        if (scene.type === 'video') {
+            return (
+                <video 
+                    src={scene.url} 
+                    className="object-cover w-full h-full select-none" 
+                    muted 
+                    loop 
+                    onMouseOver={e => e.target.play().catch(()=>{})} 
+                    onMouseOut={e => e.target.pause()}
+                    // PROTECTION
+                    onContextMenu={preventTheft}
+                    onDragStart={preventTheft}
+                    draggable={false}
+                />
+            );
+        }
+        return (
+            <Image 
+                src={scene.thumbnail || '/placeholder.jpg'} 
+                alt={scene.name || 'Scene'} 
+                fill 
+                sizes="(max-width: 768px) 33vw, 20vw" 
+                className="object-cover group-hover:scale-105 transition-transform duration-300 select-none"
+                // PROTECTION
+                onContextMenu={preventTheft}
+                onDragStart={preventTheft}
+                draggable={false}
+            />
+        );
+    };
+
     return (
-        <button onClick={onClick} className={cn("rounded-lg overflow-hidden border-2 transition-all group relative w-full", isActive ? "border-yellow-400 ring-2 ring-yellow-400/50" : "border-transparent hover:border-gray-600")}>
-            <div className="relative aspect-[16/9] w-full">
-                <Image src={scene.thumbnail || '/placeholder.jpg'} alt={scene.name || 'Scene'} fill sizes="(max-width: 768px) 33vw, 20vw" className="object-cover group-hover:scale-105 transition-transform duration-300" />
-            </div>
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2">
-                <p className="text-xs font-medium text-center text-white truncate px-1">{scene.name || 'Untitled'}</p>
+        <button 
+            onClick={onClick} 
+            className={cn(
+                "rounded-lg overflow-hidden border-2 transition-all group relative aspect-[16/9] w-full select-none", 
+                isActive ? "border-yellow-400 ring-2 ring-yellow-400/50" : "border-transparent hover:border-gray-600 bg-black/40"
+            )}
+            onContextMenu={preventTheft} // Protects the button container too
+        >
+            {renderMedia()}
+            
+            {/* Transparent Overlay Shield */}
+            <div 
+                className="absolute inset-0 z-20" 
+                onContextMenu={preventTheft}
+            />
+
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 z-30 pointer-events-none">
+                <p className="text-xs font-medium text-center text-white truncate">{scene.name}</p>
             </div>
         </button>
     );
