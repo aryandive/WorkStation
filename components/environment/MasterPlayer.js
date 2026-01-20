@@ -23,117 +23,116 @@ export default function MasterPlayer() {
     const { activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying } = useEnvironment();
     const videoRef = useRef(null);
     const iframeRef = useRef(null);
+    const bgYoutubeRef = useRef(null);
 
+    // --- Protection Helper ---
+    const protectMedia = (e) => {
+        e.preventDefault();
+        return false;
+    };
+
+    // --- Audio/Video Playback Logic ---
     useEffect(() => {
         if (videoRef.current) {
-            if (isGlobalPlaying) {
-                // Only try to play if there is a valid source
-                if (videoRef.current.currentSrc || videoRef.current.src) {
-                    videoRef.current.play().catch(e => console.error("Video play failed:", e));
-                }
+            if (isGlobalPlaying && activeScene.type === 'video') {
+                videoRef.current.play().catch(e => console.error("Video play failed:", e));
             } else {
                 videoRef.current.pause();
             }
         }
     }, [isGlobalPlaying, activeScene]);
 
-    // FIX: Use null instead of "" to prevent browser from downloading the page as video
-    const videoSrc = activeScene.type === 'video' ? activeScene.path : null;
-
-    const youtubeSrc = youtube.id
-        ? `https://www.youtube.com/embed/${youtube.id}?autoplay=1&mute=${youtube.isMuted ? 1 : 0}&controls=${youtube.showControls ? 1 : 0}&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3&playsinline=1&loop=1&playlist=${youtube.id}&fs=0&cc_load_policy=0&disablekb=${youtube.showControls ? 0 : 1}`
+    // --- Construct Sources ---
+    const localVideoSrc = activeScene.type === 'video' ? activeScene.path : null;
+    
+    // Foreground (Study Mode) Player
+    const studyModeSrc = youtube.id
+        ? `https://www.youtube.com/embed/${youtube.id}?autoplay=1&mute=${youtube.isMuted ? 1 : 0}&controls=${youtube.showControls ? 1 : 0}&rel=0&showinfo=0&modestbranding=1&playsinline=1&loop=1&playlist=${youtube.id}`
         : "";
 
-    // When showing controls, ensure the iframe can receive keyboard focus so arrow keys work
-    useEffect(() => {
-        if (youtube.id && youtube.showControls && iframeRef.current) {
-            try {
-                iframeRef.current.focus();
-            } catch (_) { }
-        }
-    }, [youtube.id, youtube.showControls]);
-
-    // Minimal key handler: when controls are visible, focus the iframe on space/arrow keys
-    useEffect(() => {
-        const handleKeyDown = (e) => {
-            if (!youtube.showControls || !iframeRef.current) return;
-            if (e.key === ' ' || e.key === 'Spacebar' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
-                // prevent page scroll and hand over to YouTube's own handler
-                e.preventDefault();
-                try { iframeRef.current.focus(); } catch (_) { }
-            }
-        };
-        window.addEventListener('keydown', handleKeyDown, { passive: false });
-        return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [youtube.showControls]);
+    // Background (Animated Scene) Player
+    const bgYoutubeSrc = activeScene.type === 'youtube-scene'
+        ? `https://www.youtube.com/embed/${activeScene.videoId}?autoplay=1&mute=1&controls=0&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3&playsinline=1&loop=1&playlist=${activeScene.videoId}&disablekb=1&fs=0`
+        : "";
 
     return (
-        <div className="fixed inset-0 w-full h-full z-0 bg-black">
-            {activeScene.type === 'image' && (
-                <Image
-                    key={activeScene.path}
-                    src={activeScene.path}
-                    alt="Background Scene"
-                    fill
-                    sizes="100vw"
-                    className="object-cover animate-fade-in"
-                    priority
-                />
+        <div 
+            className="fixed inset-0 w-full h-full z-0 bg-black select-none"
+            onContextMenu={protectMedia} // GLOBAL RIGHT CLICK BLOCK ON BG
+        >
+            
+            {/* 1. STATIC IMAGE LAYER - Protected */}
+            {activeScene.type === 'image' && activeScene.path && (
+                <div className="absolute inset-0 animate-fade-in pointer-events-none user-select-none">
+                     <Image
+                        src={activeScene.path}
+                        alt="Background Scene"
+                        fill
+                        sizes="100vw"
+                        className="object-cover"
+                        priority
+                        draggable={false}
+                        onContextMenu={protectMedia}
+                        onDragStart={protectMedia}
+                    />
+                    {/* Transparent Shield Overlay for extra safety */}
+                    <div className="absolute inset-0 z-10" />
+                </div>
             )}
 
-            {/* FIX: key uses 'no-video' fallback to prevent null key, src passes null correctly */}
+            {/* 2. LOCAL VIDEO LAYER - Protected */}
             <video
                 ref={videoRef}
-                key={videoSrc || 'no-video'}
-                src={videoSrc}
-                className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ease-in-out"
+                key={localVideoSrc || 'no-video'}
+                src={localVideoSrc}
+                className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ease-in-out pointer-events-none"
                 autoPlay={isGlobalPlaying}
                 loop
                 muted
                 playsInline
+                draggable={false}
+                onContextMenu={protectMedia}
                 style={{ opacity: activeScene.type === 'video' ? 1 : 0 }}
             />
 
+            {/* 3. YOUTUBE BACKGROUND LAYER - Protected via pointer-events-none */}
+            {activeScene.type === 'youtube-scene' && (
+                 <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vh]">
+                         <iframe
+                            ref={bgYoutubeRef}
+                            src={bgYoutubeSrc}
+                            title="Background Ambience"
+                            className="w-full h-full border-0 pointer-events-none"
+                            allow="autoplay; encrypted-media"
+                        />
+                    </div>
+                    {/* Click Shield */}
+                    <div className="absolute inset-0 z-50" onContextMenu={protectMedia} />
+                 </div>
+            )}
+
+            {/* 4. FOREGROUND YOUTUBE PLAYER (Study Mode) */}
             {youtube.id && (
                 <div
-                    className="absolute inset-0 w-full h-full overflow-hidden"
+                    className="absolute inset-0 w-full h-full overflow-hidden z-10"
                     style={{ opacity: youtube.showPlayer ? 1 : 0, transition: 'opacity 500ms ease-in-out' }}
-                    onContextMenu={(e) => e.preventDefault()} // Disable right-click context menu on the entire container
                 >
                     <iframe
                         ref={iframeRef}
-                        key={youtube.id + (youtube.showControls ? '_c' : '')}
-                        src={youtubeSrc}
-                        title="YouTube video player"
-                        frameBorder="0"
+                        src={studyModeSrc}
+                        title="Study Mode Player"
+                        className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100vw] h-[56.25vw] min-h-[100vh] min-w-[177.78vh]"
                         allow="autoplay; encrypted-media; picture-in-picture"
-                        allowFullScreen={false}
                         tabIndex={0}
-                        style={{
-                            position: 'absolute',
-                            top: '50%',
-                            left: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            width: '177.78vh',
-                            height: '100vh',
-                            minWidth: '100vw',
-                            minHeight: '56.25vw',
-                            border: 0,
-                        }}
                     />
-                    {/* Transparent overlay only when controls are hidden */}
                     {!youtube.showControls && (
-                        <div
-                            className="absolute top-0 left-0 right-0"
-                            style={{
-                                bottom: '0',
-                                zIndex: 1,
-                            }}
-                        />
+                        <div className="absolute inset-0 z-20" onContextMenu={protectMedia} />
                     )}
                 </div>
             )}
 
+            {/* 5. SOUND LAYERS */}
             {activeSounds.map(soundSrc => (
                 <SoundPlayer
                     key={soundSrc}
