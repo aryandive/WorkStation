@@ -33,7 +33,9 @@ import {
     NotebookPen,
     Target,
     CheckCircle,
-    Layers
+    Layers,
+    ChevronRight, // ADDED
+    ChevronDown   // ADDED
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
@@ -48,18 +50,12 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
     const [user, setUser] = useState(null);
     const [loading, setLoading] = useState(true);
 
-    // New Feature States
     const [isFocusMode, setIsFocusMode] = useState(false);
-
-    // In a real app, this setting would be fetched from the user's profile
     const [isAutoJournalingEnabled, setIsAutoJournalingEnabled] = useState(true);
 
     const supabase = createClient();
-
-    // Create a ref for the audio element
     const completionSoundRef = useRef(null);
 
-    // Preload the audio when the component is open
     useEffect(() => {
         if (isOpen) {
             completionSoundRef.current = new Audio('/sounds/ting.mp3');
@@ -68,7 +64,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
     const playCompletionSound = () => {
         if (completionSoundRef.current) {
-            completionSoundRef.current.currentTime = 0; // Rewind to start
+            completionSoundRef.current.currentTime = 0;
             completionSoundRef.current.play().catch(error => {
                 console.error("Error playing sound:", error);
             });
@@ -108,7 +104,6 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
         const taskToUpdate = originalTasks.find(t => t.id === taskId);
         const updatedTask = { ...taskToUpdate, ...updates };
 
-        // Play sound if the task is being marked as complete
         if (updates.is_complete && !taskToUpdate.is_complete) {
             playCompletionSound();
         }
@@ -123,7 +118,6 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                 setTasks(originalTasks);
                 eventBus.dispatch('tasksUpdated');
             } else {
-                // PREMIUM FEATURE: Automated Journaling on task completion
                 if (updates.is_complete && !taskToUpdate.is_complete && isAutoJournalingEnabled) {
                     const appendToJournal = async () => {
                         const todayStart = new Date();
@@ -279,27 +273,20 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
     };
 
     const clearCompleted = () => {
-        // Find top-level completed tasks in the current project
         const tasksToDelete = tasks.filter(t => t.project_id === activeProjectId && t.is_complete && !t.parent_task_id);
         tasksToDelete.forEach(t => deleteTask(t.id));
     };
 
     const activeProject = projects.find(p => p.id === activeProjectId);
 
-    // Sort and Filter Tasks
-    // 1. Filter by Project & Top-Level
-    // 2. Sort by Priority (High to Low) -> Created At (Old to New)
     let displayedTasks = tasks
         .filter(t => t.project_id === activeProjectId && !t.parent_task_id)
         .sort((a, b) => {
-            // Sort by priority (descending)
             const priorityDiff = (b.priority || 0) - (a.priority || 0);
             if (priorityDiff !== 0) return priorityDiff;
-            // Then by date (ascending - oldest first)
             return new Date(a.created_at) - new Date(b.created_at);
         });
 
-    // Apply Focus Mode Filter
     if (isFocusMode) {
         const firstIncomplete = displayedTasks.find(t => !t.is_complete);
         displayedTasks = firstIncomplete ? [firstIncomplete] : [];
@@ -310,10 +297,10 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
             <DialogContent className="max-w-4xl h-[70vh] bg-gray-900 text-white border-gray-700 flex p-0">
                 <aside className="w-1/4 bg-gray-950/50 border-r border-gray-800 p-4 flex flex-col">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Folder size={20} /> Projects</h2>
-                    <div className="flex-grow overflow-y-auto">
+                    <div className="flex-grow overflow-y-auto custom-scrollbar">
                         {projects.map(p => (
                             <div key={p.id} className="flex items-center group">
-                                <button onClick={() => setActiveProjectId(p.id)} className={cn("w-full text-left p-2 rounded mb-1", activeProjectId === p.id ? 'bg-yellow-500/20 text-yellow-400' : 'hover:bg-gray-800')}>{p.name}</button>
+                                <button onClick={() => setActiveProjectId(p.id)} className={cn("w-full text-left p-2 rounded mb-1 truncate", activeProjectId === p.id ? 'bg-yellow-500/20 text-yellow-400' : 'hover:bg-gray-800')}>{p.name}</button>
                                 {projects.length > 1 && <Button onClick={() => deleteProject(p.id)} variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-500/20"><X size={16} /></Button>}
                             </div>
                         ))}
@@ -325,7 +312,6 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                 </aside>
 
                 <main className="w-3/4 p-6 flex flex-col relative">
-                    {/* Header */}
                     <DialogHeader className="flex flex-row items-center justify-between mb-4 space-y-0">
                         <div>
                             <DialogTitle className="text-2xl text-yellow-400 flex items-center gap-2">
@@ -370,10 +356,9 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                         </div>
                     </DialogHeader>
 
-                    {/* Content Area */}
                     {loading ? <p>Loading tasks...</p> : (
                         <TooltipProvider>
-                            <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar">
+                            <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar pb-20">
                                 {displayedTasks.length > 0 ? (
                                     displayedTasks.map(task => <TaskItem key={task.id} task={task} allTasks={tasks} onUpdate={updateTask} onDelete={deleteTask} onAddTask={addTask} />)
                                 ) : (
@@ -398,7 +383,6 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                                 )}
                             </div>
 
-                            {/* Input Area - Hidden in Focus Mode if no tasks, or generally kept for quick add */}
                             {!isFocusMode && (
                                 <form onSubmit={(e) => { e.preventDefault(); addTask(newTaskText); }} className="mt-4 flex gap-2">
                                     <Input value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} placeholder="Add a new task..." className="bg-gray-800 border-gray-700 text-base" disabled={!activeProjectId} />
@@ -417,25 +401,91 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
     const [isAddingSubtask, setIsAddingSubtask] = useState(false);
     const [subtaskText, setSubtaskText] = useState('');
     const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
-
-    const handleAddSubtask = () => {
-        if (!subtaskText.trim()) { setIsAddingSubtask(false); return; };
-        onAddTask(subtaskText, task.id);
-        setSubtaskText('');
-        setIsAddingSubtask(false);
-    };
+    
+    // --- New States ---
+    const [isExpanded, setIsExpanded] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(task.task);
+    
+    const subtaskInputRef = useRef(null);
 
     const subtasks = allTasks.filter(t => t.parent_task_id === task.id).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    const hasSubtasks = subtasks.length > 0;
+
+    // Handle Adding Subtasks Continuously
+    const handleAddSubtask = () => {
+        if (!subtaskText.trim()) { 
+            setIsAddingSubtask(false); 
+            return; 
+        };
+        onAddTask(subtaskText, task.id);
+        setSubtaskText('');
+        // We keep isAddingSubtask true so the input stays open for the next one
+        // Ensure expanded is true so we see the new task
+        setIsExpanded(true);
+    };
+
+    // Auto-focus logic for subtask input
+    useEffect(() => {
+        if (isAddingSubtask && subtaskInputRef.current) {
+            subtaskInputRef.current.focus();
+        }
+    }, [isAddingSubtask, subtasks]); // Refocus when list changes (new item added)
+
+    // Handle Inline Edit Save
+    const handleEditSave = () => {
+        if (editText.trim() !== task.task && editText.trim() !== '') {
+            onUpdate(task.id, { task: editText, updated_at: new Date().toISOString() });
+        } else {
+            setEditText(task.task); // Revert if empty
+        }
+        setIsEditing(false);
+    };
 
     return (
         <>
             <div className={cn("bg-black/20 p-3 rounded-lg mb-2 border border-transparent hover:border-gray-700/50 transition-all", task.priority === 3 && !task.is_complete && "border-l-4 border-l-red-500")}>
-                <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 flex-grow min-w-0">
-                        <Checkbox checked={task.is_complete} onCheckedChange={(checked) => onUpdate(task.id, { is_complete: !!checked, updated_at: new Date().toISOString() })} className="border-gray-600 data-[state=checked]:bg-yellow-500 data-[state=checked]:border-yellow-500" />
-                        <span className={cn("truncate transition-all", task.is_complete && 'line-through text-gray-500 opacity-50')}>{task.task}</span>
+                <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-3 flex-grow min-w-0 pt-1">
+                        
+                        {/* 1. COLLAPSE CHEVRON */}
+                        {(hasSubtasks || isAddingSubtask) ? (
+                            <button onClick={() => setIsExpanded(!isExpanded)} className="text-gray-400 hover:text-white mt-1">
+                                {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                            </button>
+                        ) : (
+                             // Spacer to align checkboxes if no chevron
+                             <div className="w-4" /> 
+                        )}
+
+                        <Checkbox checked={task.is_complete} onCheckedChange={(checked) => onUpdate(task.id, { is_complete: !!checked, updated_at: new Date().toISOString() })} className="mt-1 border-gray-600 data-[state=checked]:bg-yellow-500 data-[state=checked]:border-yellow-500" />
+                        
+                        {/* 2. INLINE EDITING & WRAPPING */}
+                        <div className="flex-grow min-w-0">
+                            {isEditing ? (
+                                <Input 
+                                    value={editText}
+                                    onChange={(e) => setEditText(e.target.value)}
+                                    onBlur={handleEditSave}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleEditSave()}
+                                    autoFocus
+                                    className="h-7 py-1 bg-gray-900 border-yellow-500 focus-visible:ring-0"
+                                />
+                            ) : (
+                                <span 
+                                    onClick={() => setIsEditing(true)}
+                                    className={cn(
+                                        "block cursor-text hover:text-gray-200 transition-all break-words whitespace-pre-wrap pr-2", // WRAPPING FIX
+                                        task.is_complete ? 'line-through text-gray-500 opacity-50' : 'text-gray-300'
+                                    )}
+                                >
+                                    {task.task}
+                                </span>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
+
+                    <div className="flex items-center gap-2 flex-shrink-0 pt-1">
                         {task.notes && (
                             <Tooltip>
                                 <TooltipTrigger asChild>
@@ -453,19 +503,41 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
                         )}
                         {task.due_date && <span className={cn("text-xs flex items-center", new Date(task.due_date) < new Date() && !task.is_complete ? "text-red-400 font-bold" : "text-gray-400")}>{format(new Date(task.due_date), "MMM d")}</span>}
                         <PriorityFlag priority={task.priority} />
-                        <TaskActions task={task} onUpdate={onUpdate} onDelete={onDelete} onToggleSubtaskInput={() => setIsAddingSubtask(!isAddingSubtask)} onSetNotes={() => setIsNotesModalOpen(true)} />
+                        <TaskActions 
+                            task={task} 
+                            onUpdate={onUpdate} 
+                            onDelete={onDelete} 
+                            onToggleSubtaskInput={() => {
+                                setIsAddingSubtask(true);
+                                setIsExpanded(true); // Auto expand when adding
+                            }} 
+                            onSetNotes={() => setIsNotesModalOpen(true)} 
+                        />
                     </div>
                 </div>
 
-                <div className="ml-8 mt-2 space-y-2">
-                    {subtasks.map(sub => <TaskItem key={sub.id} task={sub} allTasks={allTasks} onUpdate={onUpdate} onDelete={onDelete} onAddTask={onAddTask} />)}
-                    {isAddingSubtask && (
-                        <form onSubmit={(e) => { e.preventDefault(); handleAddSubtask() }} className="flex gap-2 items-center animate-in slide-in-from-top-2">
-                            <Input value={subtaskText} onChange={e => setSubtaskText(e.target.value)} placeholder="Add sub-task..." className="h-8 bg-gray-800/50 text-sm" autoFocus />
-                            <Button type="submit" size="sm" className="h-8 bg-yellow-500 text-black hover:bg-yellow-600">Add</Button>
-                        </form>
-                    )}
-                </div>
+                {/* 3. COLLAPSIBLE SUBTASKS CONTAINER */}
+                {(isExpanded || isAddingSubtask) && (
+                    <div className="ml-8 mt-2 space-y-2 border-l-2 border-gray-800 pl-4 animate-in slide-in-from-top-1 fade-in duration-200">
+                        {subtasks.map(sub => <TaskItem key={sub.id} task={sub} allTasks={allTasks} onUpdate={onUpdate} onDelete={onDelete} onAddTask={onAddTask} />)}
+                        
+                        {/* 4. CONTINUOUS ADD SUBTASK INPUT */}
+                        {isAddingSubtask && (
+                            <form onSubmit={(e) => { e.preventDefault(); handleAddSubtask() }} className="flex gap-2 items-center">
+                                <Input 
+                                    ref={subtaskInputRef} // FOCUS REF
+                                    value={subtaskText} 
+                                    onChange={e => setSubtaskText(e.target.value)} 
+                                    onKeyDown={(e) => { if(e.key === 'Escape') setIsAddingSubtask(false); }}
+                                    placeholder="Add sub-task..." 
+                                    className="h-8 bg-gray-800/50 text-sm" 
+                                />
+                                <Button type="submit" size="sm" className="h-8 bg-yellow-500 text-black hover:bg-yellow-600">Add</Button>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => setIsAddingSubtask(false)} className="h-8 w-8 p-0"><X size={14}/></Button>
+                            </form>
+                        )}
+                    </div>
+                )}
             </div>
             <NotesModal isOpen={isNotesModalOpen} setIsOpen={setIsNotesModalOpen} task={task} onUpdate={onUpdate} />
         </>
@@ -501,13 +573,11 @@ function TaskActions({ task, onUpdate, onDelete, onToggleSubtaskInput, onSetNote
                                     onUpdate(task.id, { due_date: null });
                                     return;
                                 }
-                                // Fix: Adjust for local timezone to prevent date shifting back by one day
                                 const offset = date.getTimezoneOffset();
                                 const localDate = new Date(date.getTime() - (offset * 60 * 1000));
                                 onUpdate(task.id, { due_date: localDate.toISOString().split('T')[0] });
                             }}
                             initialFocus
-                            // Fix: Added 'bg-gray-900' and specific text colors to fix visibility
                             className="bg-gray-900 text-gray-100 border border-gray-800 rounded-md p-3"
                         />
                     </PopoverContent>
