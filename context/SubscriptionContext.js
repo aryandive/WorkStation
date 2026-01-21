@@ -13,7 +13,7 @@ export function SubscriptionProvider({ children }) {
     const supabase = createClient();
 
     useEffect(() => {
-        if (authLoading) return; // Wait for authentication to settle
+        if (authLoading) return;
         if (!user) {
             setSubscription(null);
             setLoading(false);
@@ -29,7 +29,7 @@ export function SubscriptionProvider({ children }) {
                 .in('status', ['trialing', 'active'])
                 .maybeSingle();
 
-            if (error && error.code !== 'PGRST116') { // PGRST116 means no rows found, which is fine
+            if (error && error.code !== 'PGRST116') {
                 console.error('Error fetching subscription:', error);
             }
 
@@ -43,8 +43,8 @@ export function SubscriptionProvider({ children }) {
 
     const value = useMemo(() => ({
         subscription,
-        // The user is considered "premium" if they have any active or trialing subscription.
-        isPro: !!subscription,
+        // --- DEV OVERRIDE: Force isPro to true for testing ---
+        isPro: !!subscription || true, 
         loading,
     }), [subscription, loading]);
 
@@ -61,4 +61,4 @@ export function useSubscription() {
         throw new Error('useSubscription must be used within a SubscriptionProvider');
     }
     return context;
-}    
+}

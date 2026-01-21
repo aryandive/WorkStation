@@ -1,9 +1,8 @@
-import { Play, Pause, RefreshCw, SkipForward, Maximize2 } from 'lucide-react';
+import { Play, Pause, RefreshCw, SkipForward, Maximize2, GripHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCallback, useRef, useEffect } from 'react';
 
 // --- Improved Sound Player Hook ---
-// Fixes "AbortError" by using cloned nodes for overlapping playback
 const useSoundPlayer = () => {
     const audioRef = useRef(null);
 
@@ -15,57 +14,67 @@ const useSoundPlayer = () => {
 
     const playSound = useCallback((soundFile) => {
         if (audioRef.current) {
-            // Clone the node to allow overlapping sounds (rapid clicking)
-            // This prevents "AbortError" when play() is called while already playing
             const tempAudio = audioRef.current.cloneNode();
             tempAudio.src = soundFile;
-            tempAudio.volume = 0.5; // Reasonable default volume for UI clicks
-            tempAudio.play().catch(err => {
-                // Ignore "user didn't interact" errors or load errors
-                console.warn("Sound play failed:", err);
-            });
+            tempAudio.volume = 0.5;
+            tempAudio.play().catch(err => console.warn("Sound play failed:", err));
         }
     }, []);
 
     return playSound;
 };
 
-export default function TimerControls({ isRunning, startTimer, pauseTimer, resetTimer, skipMode, isMinimized = false, maximize }) {
+export default function TimerControls({ 
+    isRunning, 
+    startTimer, 
+    pauseTimer, 
+    resetTimer, 
+    skipMode, 
+    isMinimized = false, 
+    maximize,
+    onRecenter // <--- NEW PROP
+}) {
     const playClickSound = useSoundPlayer();
 
-    const handleStart = () => {
-        playClickSound('/sounds/click-start.mp3');
-        startTimer();
-    };
-
-    const handlePause = () => {
-        playClickSound('/sounds/click-pause.mp3');
-        pauseTimer();
-    };
-
-    const handleReset = () => {
-        playClickSound('/sounds/click-reset.mp3');
-        resetTimer();
-    };
-
-    const handleSkip = () => {
-        playClickSound('/sounds/click-skip.mp3');
-        skipMode();
-    };
+    const handleStart = () => { playClickSound('/sounds/click-start.mp3'); startTimer(); };
+    const handlePause = () => { playClickSound('/sounds/click-pause.mp3'); pauseTimer(); };
+    const handleReset = () => { playClickSound('/sounds/click-reset.mp3'); resetTimer(); };
+    const handleSkip = () => { playClickSound('/sounds/click-skip.mp3'); skipMode(); };
 
     if (isMinimized) {
         return (
             <>
+                {/* 1. DRAG BUTTON (Handle) */}
+                {/* We use a specific class 'drag-handle' for React-Draggable to target */}
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={onRecenter}
+                    className="drag-handle text-white/70 hover:text-white hover:bg-white/20 rounded-full h-12 w-12 cursor-grab active:cursor-grabbing"
+                >
+                    <GripHorizontal size={24} />
+                </Button>
+
+                {/* 2. PLAY/PAUSE (Middle) */}
                 {isRunning ? (
-                    <Button variant="ghost" size="icon" onClick={handlePause} className="text-white hover:bg-white/20 rounded-full h-12 w-12"><Pause size={24} /></Button>
+                    <Button variant="ghost" size="icon" onClick={handlePause} className="text-white hover:bg-white/20 rounded-full h-12 w-12">
+                        <Pause size={24} />
+                    </Button>
                 ) : (
-                    <Button variant="ghost" size="icon" onClick={handleStart} className="text-white hover:bg-white/20 rounded-full h-12 w-12"><Play size={24} /></Button>
+                    <Button variant="ghost" size="icon" onClick={handleStart} className="text-white hover:bg-white/20 rounded-full h-12 w-12">
+                        <Play size={24} />
+                    </Button>
                 )}
-                <Button variant="ghost" size="icon" onClick={maximize} className="text-white hover:bg-white/20 rounded-full h-12 w-12"><Maximize2 size={24} /></Button>
+
+                {/* 3. EXPAND (Right) */}
+                <Button variant="ghost" size="icon" onClick={maximize} className="text-white hover:bg-white/20 rounded-full h-12 w-12">
+                    <Maximize2 size={24} />
+                </Button>
             </>
         )
     }
 
+    // ... (Regular Full View Controls remain unchanged)
     return (
         <div className="flex justify-center items-center space-x-4 mt-6">
             <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white" onClick={handleReset}>

@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Draggable from 'react-draggable';
 import usePomodoroTimer from '@/hooks/usePomodoroTimer';
-import { useSessionLogger } from '@/hooks/useSessionLogger'; // IMPORT THE NEW HOOK
+import { useSessionLogger } from '@/hooks/useSessionLogger';
 import SessionSettings from '@/components/pomodoro/SessionSettings';
 import ProgressCircle from '@/components/pomodoro/ProgressCircle';
 import TimerControls from '@/components/pomodoro/TimerControls';
@@ -37,10 +38,13 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     const [isMinimized, setIsMinimized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
+    // --- NEW: Draggable State & Refs ---
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const isDraggingRef = useRef(false); // Track if we are currently dragging
+    const draggableNodeRef = useRef(null); // <--- FIXED: Moved Ref here (Top Level)
+
     const supabase = createClient();
     const playSound = useKeyboardSound();
-
-    // INITIALIZE THE LOGGER
     const { saveSession } = useSessionLogger();
 
     const linkedTaskRef = useRef(linkedTask);
@@ -48,21 +52,13 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         linkedTaskRef.current = linkedTask;
     }, [linkedTask]);
 
-    // --- UPDATED COMPLETION HANDLER ---
     const handleSessionComplete = useCallback(({ sessionWasWork, duration }) => {
-        // Only log if it was a work session and had actual duration
         if (sessionWasWork && duration > 0) {
-
-            // 1. Save the detailed session data (Cloud or Local)
             saveSession({
                 duration,
                 taskId: linkedTaskRef.current ? linkedTaskRef.current.id : null
             });
-
-            // 2. Update visual progress on the task (Legacy behavior)
             if (linkedTaskRef.current && onTaskTimeUpdateRef && typeof onTaskTimeUpdateRef.current === 'function') {
-                // Optional: Only increment "Pomodoro Count" if duration was significant (e.g. > 20 mins)
-                // or just increment by 1 for every finish.
                 onTaskTimeUpdateRef.current(linkedTaskRef.current.id, 1);
             }
         }
@@ -73,15 +69,20 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         startTimer, pauseTimer, resetTimer, skipMode, updateSettings, setMode,
     } = usePomodoroTimer({ onSessionComplete: handleSessionComplete });
 
-    // ... (Rest of your UI code remains exactly the same) ...
-
     const colorMap = {
         work: { button: 'bg-yellow-500/80 text-white hover:bg-yellow-600/80', progress: 'text-yellow-500' },
         break: { button: 'bg-green-500/80 text-white hover:bg-green-600/80', progress: 'text-green-500' },
         longBreak: { button: 'bg-blue-500/80 text-white hover:bg-blue-600/80', progress: 'text-blue-500' },
     };
 
-    // Keyboard shortcuts logic (keep existing code)
+    // --- Recenter Logic ---
+    const handleRecenter = () => {
+        if (!isDraggingRef.current) {
+            setPosition({ x: 0, y: 0 });
+        }
+    };
+
+    // Keyboard shortcuts
     useEffect(() => {
         if (!isOpen) return;
         const handleKeyDown = (e) => {
@@ -107,7 +108,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         return () => window.removeEventListener('keydown', handleKeyDown);
     }, [isOpen, isRunning, isMinimized, isSettingsOpen, startTimer, pauseTimer, skipMode, resetTimer, setIsSettingsOpen, setIsMinimized, setIsOpen, playSound]);
 
-    // Data fetching logic (keep existing code)
+    // Data Fetching
     useEffect(() => {
         if (isOpen) {
             const fetchUserAndTasks = async () => {
@@ -131,12 +132,46 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
 
     if (isMinimized) {
         return (
-            <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group animate-in fade-in zoom-in-95 z-50">
-                <h3 className="text-white/80 text-lg font-semibold drop-shadow-lg mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">{linkedTask?.task || 'Focus Session'}</h3>
-                <span className="text-8xl font-bold text-white tabular-nums drop-shadow-2xl cursor-default select-none">{minutes}:{seconds}</span>
-                <div className="flex gap-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                    <TimerControls isRunning={isRunning} startTimer={startTimer} pauseTimer={pauseTimer} resetTimer={resetTimer} skipMode={skipMode} isMinimized={true} maximize={() => setIsMinimized(false)} />
-                </div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+                <Draggable
+                    nodeRef={draggableNodeRef} // <--- FIXED: Using the top-level ref
+                    position={position}
+                    handle=".drag-handle"
+                    onStart={() => { isDraggingRef.current = false; }}
+                    onDrag={(e, data) => { 
+                        setPosition({ x: data.x, y: data.y });
+                        isDraggingRef.current = true;
+                    }}
+                    onStop={() => {
+                        setTimeout(() => { isDraggingRef.current = false; }, 100);
+                    }}
+                >
+                    <div 
+                        ref={draggableNodeRef} // <--- FIXED: Attached ref here for Draggable
+                        className="pointer-events-auto flex flex-col items-center group"
+                    >
+                        <h3 className="text-white/80 text-lg font-semibold drop-shadow-lg mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            {linkedTask?.task || 'Focus Session'}
+                        </h3>
+                        
+                        <span className="text-8xl font-bold text-white tabular-nums drop-shadow-2xl cursor-default select-none">
+                            {minutes}:{seconds}
+                        </span>
+                        
+                        <div className="flex gap-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <TimerControls 
+                                isRunning={isRunning} 
+                                startTimer={startTimer} 
+                                pauseTimer={pauseTimer} 
+                                resetTimer={resetTimer} 
+                                skipMode={skipMode} 
+                                isMinimized={true} 
+                                maximize={() => setIsMinimized(false)}
+                                onRecenter={handleRecenter}
+                            />
+                        </div>
+                    </div>
+                </Draggable>
             </div>
         )
     }
@@ -187,4 +222,4 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
             <SessionSettings isOpen={isSettingsOpen} setIsOpen={setIsSettingsOpen} settings={settings} updateSettings={updateSettings} isRunning={isRunning} />
         </div>
     );
-}
+} 
