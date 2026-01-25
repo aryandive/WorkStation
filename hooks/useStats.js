@@ -14,14 +14,23 @@ export default function useStats() {
     const defaultStats = useMemo(() => ({
         tasksDoneToday: 0,
         totalTasksToday: 0,
+        tasksDoneAllTime: 0,
+        totalTasksAllTime: 0,
+        
         daysAccessed: 0,
         totalFocusTimeFormatted: "0h 0m",
+        todaysFocusFormatted: "0h 0m",
+
         weeklyFocusTrend: [],
         chartData: { weekly: [], monthly: [], yearly: [] },
         productivityHeatmap: {},
-        focusByProject: [],
+        
+        // --- UPDATED: Split Project Data ---
+        focusByProject: { today: [], week: [] },
+        
         todaysFocusMinutes: 0,
         bestFocusMinutes: 0,
+        bestDayDate: null, 
         allTimeFocusMinutes: 0,
         weeklyGrowthPercentage: 0
     }), []);
@@ -33,13 +42,16 @@ export default function useStats() {
     const { user } = useAuth();
     const supabase = useMemo(() => createClient(), []);
 
-    // --- 1. Core Logic (O(N) Complexity) ---
     const processStatsData = useCallback((sessions, tasks, projects) => {
         const now = new Date();
         const today = startOfDay(now);
         const todayStr = format(today, 'yyyy-MM-dd');
+        const weekStart = subDays(today, 6); // Start of "This Week" (Rolling 7 days)
 
         // A. Process Tasks
+        const totalTasksAllTime = tasks.length;
+        const tasksDoneAllTime = tasks.filter(t => t.is_complete).length;
+
         let totalTasksToday = 0;
         let tasksDoneToday = 0;
         
@@ -52,14 +64,17 @@ export default function useStats() {
             }
         });
 
-        // B. Process Sessions (Aggregation Maps)
+        // B. Process Sessions
         const dailyMap = new Map();   
         const monthlyMap = new Map(); 
-        const projectMap = new Map(); 
+        
+        // --- UPDATED: Separate Maps for Projects ---
+        const projectMapToday = new Map();
+        const projectMapWeek = new Map();
+        
         const heatMap = {};           
 
         let totalMinutesAllTime = 0;
-        let maxSession = 0;
         let todayMinutes = 0;
         const uniqueDays = new Set();
 
@@ -72,7 +87,6 @@ export default function useStats() {
             const monthKey = format(sDate, 'yyyy-MM');
 
             totalMinutesAllTime += duration;
-            if (duration > maxSession) maxSession = duration;
             uniqueDays.add(dateKey);
 
             if (dateKey === todayStr) todayMinutes += duration;
@@ -83,6 +97,7 @@ export default function useStats() {
             const heatKey = startOfDay(sDate).toISOString();
             heatMap[heatKey] = (heatMap[heatKey] || 0) + duration;
 
+            // Project Logic
             let projectName = 'Unlinked';
             if (s.task_id) {
                 const task = tasks.find(t => t.id === s.task_id);
@@ -91,17 +106,35 @@ export default function useStats() {
                     if (project) projectName = project.name;
                 }
             }
-            projectMap.set(projectName, (projectMap.get(projectName) || 0) + duration);
+
+            // Populate Today Map
+            if (isSameDay(sDate, today)) {
+                projectMapToday.set(projectName, (projectMapToday.get(projectName) || 0) + duration);
+            }
+
+            // Populate Week Map (Rolling 7 Days)
+            if (sDate >= weekStart) {
+                projectMapWeek.set(projectName, (projectMapWeek.get(projectName) || 0) + duration);
+            }
         });
 
-        // C. Generate Chart Data
+        // Calculate Best Day Record
+        let maxDailyMinutes = 0;
+        let maxDailyDate = null;
+        dailyMap.forEach((minutes, dateStr) => {
+            if (minutes > maxDailyMinutes) {
+                maxDailyMinutes = minutes;
+                maxDailyDate = format(parseISO(dateStr), 'MMM d, yyyy');
+            }
+        });
+
+        // Generate Chart Data
         const generateChartData = (daysBack, dateFormat, labelFormat) => {
             const data = [];
             for (let i = daysBack - 1; i >= 0; i--) {
                 const targetDate = subDays(today, i);
                 const key = format(targetDate, dateFormat);
                 const mins = dailyMap.get(key) || 0;
-                
                 data.push({
                     name: format(targetDate, labelFormat), 
                     minutes: mins,
@@ -111,13 +144,8 @@ export default function useStats() {
             return data;
         };
 
-        // Weekly (Last 7 Days)
         const weeklyData = generateChartData(7, 'yyyy-MM-dd', 'EEE');
-
-        // Monthly (Last 30 Days) - FIX: Always provide a name for correct tooltips
         const monthlyData = generateChartData(30, 'yyyy-MM-dd', 'd MMM');
-
-        // Yearly (Last 12 Months)
         const yearlyData = [];
         for (let i = 11; i >= 0; i--) {
             const targetMonth = subMonths(today, i);
@@ -129,7 +157,6 @@ export default function useStats() {
             });
         }
 
-        // D. Growth & Formatting
         const thisWeekSum = weeklyData.reduce((acc, curr) => acc + curr.minutes, 0);
         let lastWeekSum = 0;
         for (let i = 13; i >= 7; i--) {
@@ -142,27 +169,35 @@ export default function useStats() {
         if (lastWeekSum === 0) growth = thisWeekSum > 0 ? 100 : 0;
         else growth = Math.round(((thisWeekSum - lastWeekSum) / lastWeekSum) * 100);
 
-        const hours = Math.floor(totalMinutesAllTime / 60);
-        const mins = totalMinutesAllTime % 60;
-        const focusByProject = Array.from(projectMap.entries()).map(([name, minutes]) => ({ name, minutes }));
+        const formatTime = (totalMins) => {
+            const h = Math.floor(totalMins / 60);
+            const m = totalMins % 60;
+            return `${h}h ${m}m`;
+        };
+
+        // --- UPDATED: Return separate arrays ---
+        const focusByProject = {
+            today: Array.from(projectMapToday.entries()).map(([name, minutes]) => ({ name, minutes })),
+            week: Array.from(projectMapWeek.entries()).map(([name, minutes]) => ({ name, minutes }))
+        };
 
         return {
-            tasksDoneToday,
-            totalTasksToday,
+            tasksDoneToday, totalTasksToday, tasksDoneAllTime, totalTasksAllTime,
             daysAccessed: uniqueDays.size,
-            totalFocusTimeFormatted: `${hours}h ${mins}m`,
+            totalFocusTimeFormatted: formatTime(totalMinutesAllTime),
+            todaysFocusFormatted: formatTime(todayMinutes),
             weeklyFocusTrend: weeklyData,
             chartData: { weekly: weeklyData, monthly: monthlyData, yearly: yearlyData },
             productivityHeatmap: heatMap,
-            focusByProject,
+            focusByProject, // Returns Object { today: [], week: [] }
             todaysFocusMinutes: todayMinutes,
-            bestFocusMinutes: maxSession,
+            bestFocusMinutes: maxDailyMinutes,
+            bestDayDate: maxDailyDate, 
             allTimeFocusMinutes: totalMinutesAllTime,
             weeklyGrowthPercentage: growth
         };
     }, []);
 
-    // --- 2. Local Storage Logic ---
     const calculateLocalStats = useCallback(() => {
         try {
             if (typeof window === 'undefined') return null;
@@ -176,53 +211,39 @@ export default function useStats() {
         }
     }, [processStatsData]);
 
-    // --- 3. Optimistic Loading (Instant Local Load) ---
     useEffect(() => {
         const local = calculateLocalStats();
         if (local) {
             setStats(local);
-            setIsLoadingStats(false); // Immediate "Ready" state
+            setIsLoadingStats(false);
         }
     }, [calculateLocalStats]);
 
-    // --- 4. Cloud Fetch (Background Sync) ---
     const fetchStats = useCallback(async () => {
-        // If we don't have local data yet, show loading. 
-        // If we do, keep showing local data while we fetch (silent update).
         if (!stats.daysAccessed) setIsLoadingStats(true);
-
         if (isPro && user) {
             try {
-                const { data: sessions } = await supabase.from('focus_sessions').select('created_at, duration_minutes, task_id').gte('created_at', subDays(new Date(), 365).toISOString()); // Optimization: Fetch last year only
+                const { data: sessions } = await supabase.from('focus_sessions').select('created_at, duration_minutes, task_id').gte('created_at', subDays(new Date(), 365).toISOString());
                 const { data: tasks } = await supabase.from('todos').select('id, created_at, updated_at, is_complete, project_id');
                 const { data: projects } = await supabase.from('projects').select('id, name');
-                
                 if (sessions) setStats(processStatsData(sessions, tasks || [], projects || []));
-            } catch (error) {
-                console.error("Error fetching cloud stats:", error);
-            }
+            } catch (error) { console.error("Error fetching cloud stats:", error); }
         }
         setIsLoadingStats(false);
     }, [isPro, user, supabase, processStatsData, stats.daysAccessed]);
 
-    // --- 5. Event Listeners ---
     useEffect(() => {
         if (!isSubscriptionLoading) fetchStats();
-        
         const handleUpdate = () => {
-            // Update immediately from local, then sync
             const local = calculateLocalStats();
             if (local) setStats(local);
             fetchStats();
         };
-
         eventBus.on('tasksUpdated', handleUpdate);
         eventBus.on('sessionCompleted', handleUpdate);
-        
         const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
             if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') fetchStats();
         });
-        
         return () => {
             eventBus.remove('tasksUpdated', handleUpdate);
             eventBus.remove('sessionCompleted', handleUpdate);

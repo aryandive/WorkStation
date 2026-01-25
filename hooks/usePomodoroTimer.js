@@ -2,19 +2,17 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-// --- Helper Functions for Notifications ---
+// --- Utils ---
 const requestNotificationPermission = async () => {
-    if (typeof window === 'undefined') return;
-    if (!("Notification" in window)) return;
+    if (typeof window === 'undefined' || !("Notification" in window)) return;
     if (Notification.permission !== "denied") await Notification.requestPermission();
 };
 
 const showNotification = (title, body) => {
-    if (typeof window === 'undefined') return;
-    if (Notification.permission === "granted") new Notification(title, { body });
+    if (typeof window === 'undefined' || Notification.permission !== "granted") return;
+    new Notification(title, { body });
 };
 
-// Define defaults
 const DEFAULT_SETTINGS = {
     workMinutes: 25,
     breakMinutes: 5,
@@ -28,161 +26,211 @@ const DEFAULT_SETTINGS = {
 };
 
 export default function usePomodoroTimer({ onSessionComplete }) {
+    // --- State ---
+    const [isStoreLoaded, setIsStoreLoaded] = useState(false); // Prevents "Flash of Default Content"
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
-    const [isSettingsLoaded, setIsSettingsLoaded] = useState(false);
-
     const [mode, setMode] = useState('work');
+    const [timeLeft, setTimeLeft] = useState(DEFAULT_SETTINGS.workMinutes * 60);
     const [isRunning, setIsRunning] = useState(false);
     const [completedSessions, setCompletedSessions] = useState(0);
 
+    // --- Refs (Mutable "Black Box" for Cleanup & Loop) ---
     const onSessionCompleteRef = useRef(onSessionComplete);
     const alarmRef = useRef(null);
     const endTimeRef = useRef(null);
+    
+    // Core Refs for Logic
+    const initialTimeRef = useRef(DEFAULT_SETTINGS.workMinutes * 60); // Total duration of current session (for Ring calc)
+    const timeLeftRef = useRef(DEFAULT_SETTINGS.workMinutes * 60);    // Current remaining seconds
+    const modeRef = useRef('work');                                   // Current mode
 
-    // Track initial duration to calculate elapsed time later
-    const initialTimeRef = useRef(DEFAULT_SETTINGS.workMinutes * 60);
-
-    // --- NEW: Refs for "Save on Exit" Logic ---
-    // These act as a "Black Box" recorder, accessible even during unmount/cleanup
-    const timeLeftRef = useRef(DEFAULT_SETTINGS.workMinutes * 60);
-    const modeRef = useRef('work');
-
-    useEffect(() => {
-        onSessionCompleteRef.current = onSessionComplete;
-    }, [onSessionComplete]);
-
-    // Load Settings
-    useEffect(() => {
-        if (typeof window !== 'undefined') {
-            const saved = localStorage.getItem('pomodoro_settings');
-            if (saved) {
-                try {
-                    setSettings(prev => ({ ...prev, ...JSON.parse(saved) }));
-                } catch (e) {
-                    console.error("Failed to parse settings", e);
-                }
-            }
-            setIsSettingsLoaded(true);
-        }
-    }, []);
-
-    // Save Settings
-    useEffect(() => {
-        if (isSettingsLoaded && typeof window !== 'undefined') {
-            localStorage.setItem('pomodoro_settings', JSON.stringify(settings));
-        }
-    }, [settings, isSettingsLoaded]);
-
-
-    const getTimeForMode = useCallback((m) => {
+    // --- Helpers ---
+    const getTimeForMode = useCallback((m, currentSettings = settings) => {
         switch (m) {
-            case 'break': return settings.breakMinutes * 60;
-            case 'longBreak': return settings.longBreakMinutes * 60;
-            default: return settings.workMinutes * 60;
+            case 'break': return currentSettings.breakMinutes * 60;
+            case 'longBreak': return currentSettings.longBreakMinutes * 60;
+            default: return currentSettings.workMinutes * 60;
         }
     }, [settings]);
 
-    const [timeLeft, setTimeLeft] = useState(getTimeForMode('work'));
-
-    // --- NEW: Sync State to Refs (The Recorder) ---
-    // We update these refs whenever state changes so the cleanup function has the latest data
+    // --- 1. Initialization & Hydration (The "Flash" Fix) ---
     useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        // A. Load Settings
+        const savedSettings = localStorage.getItem('pomodoro_settings');
+        let currentSettings = DEFAULT_SETTINGS;
+        if (savedSettings) {
+            try {
+                currentSettings = { ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) };
+                setSettings(currentSettings);
+            } catch (e) { console.error("Settings parse error", e); }
+        }
+
+        // B. Load State (Persistence)
+        const savedState = localStorage.getItem('pomodoro_state');
+        if (savedState) {
+            try {
+                const parsed = JSON.parse(savedState);
+                const { 
+                    mode: savedMode, 
+                    timeLeft: savedTimeLeft, 
+                    isRunning: wasRunning, 
+                    targetEndTime, 
+                    initialDuration // <--- CRITICAL FIX: Restore the denominator for the ring
+                } = parsed;
+
+                // 1. Restore Mode
+                setMode(savedMode);
+                modeRef.current = savedMode;
+
+                // 2. Restore Initial Duration (Fixes Ring Glitch)
+                // If missing (legacy data), fallback to settings
+                const totalDuration = initialDuration || getTimeForMode(savedMode, currentSettings);
+                initialTimeRef.current = totalDuration;
+
+                // 3. Calculate Drift (Fixes Time Accuracy)
+                let newTimeLeft = savedTimeLeft;
+                if (wasRunning && targetEndTime) {
+                    const now = Date.now();
+                    const secondsRemaining = Math.ceil((targetEndTime - now) / 1000);
+                    newTimeLeft = secondsRemaining > 0 ? secondsRemaining : 0;
+                }
+
+                // 4. Apply State
+                setTimeLeft(newTimeLeft);
+                timeLeftRef.current = newTimeLeft;
+                
+                if (newTimeLeft > 0 && wasRunning) {
+                    setIsRunning(true);
+                    endTimeRef.current = Date.now() + (newTimeLeft * 1000);
+                } else if (newTimeLeft <= 0 && wasRunning) {
+                    // Timer finished while tab was closed
+                    setIsRunning(false);
+                    setTimeLeft(0);
+                } else {
+                    // Was paused
+                    setIsRunning(false);
+                }
+
+            } catch (e) { console.error("State restore error", e); }
+        } else {
+            // No saved state? Init fresh based on loaded settings
+            const startDuration = getTimeForMode('work', currentSettings);
+            setTimeLeft(startDuration);
+            timeLeftRef.current = startDuration;
+            initialTimeRef.current = startDuration;
+        }
+
+        // C. Init Audio & Permissions
+        alarmRef.current = new Audio();
+        requestNotificationPermission();
+
+        // D. Mark Ready (Allows UI to render)
+        setIsStoreLoaded(true);
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // Run ONCE on mount
+
+    // Update Ref when callback changes
+    useEffect(() => { onSessionCompleteRef.current = onSessionComplete; }, [onSessionComplete]);
+
+    // --- 2. Persistence Loop (Save State Every Change) ---
+    useEffect(() => {
+        if (!isStoreLoaded || typeof window === 'undefined') return;
+
+        const stateToSave = {
+            mode,
+            timeLeft,
+            isRunning,
+            targetEndTime: isRunning && endTimeRef.current ? endTimeRef.current : null,
+            initialDuration: initialTimeRef.current, // <--- Saving this fixes the ring on refresh
+            lastUpdated: Date.now()
+        };
+        localStorage.setItem('pomodoro_state', JSON.stringify(stateToSave));
+        
+        // Sync Refs (Architecture: State drives UI, Refs drive Logic)
         timeLeftRef.current = timeLeft;
-    }, [timeLeft]);
-
-    useEffect(() => {
         modeRef.current = mode;
-    }, [mode]);
 
+    }, [mode, timeLeft, isRunning, isStoreLoaded]);
 
-    // Handle Mode/Settings changes
-    // We intentionally exclude isRunning to prevent reset on pause
+    // Save settings when changed
     useEffect(() => {
-        if (!isRunning) {
-            const time = getTimeForMode(mode);
-            setTimeLeft(time);
-            initialTimeRef.current = time;
-            timeLeftRef.current = time; // Ensure ref is synced immediately
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [mode, settings, getTimeForMode]);
+        if (isStoreLoaded) localStorage.setItem('pomodoro_settings', JSON.stringify(settings));
+    }, [settings, isStoreLoaded]);
 
-    const playAlarm = useCallback(() => {
-        if (alarmRef.current) {
-            alarmRef.current.src = `/sounds/${settings.alarmSound}`;
-            alarmRef.current.volume = settings.volume || 1;
-            alarmRef.current.play().catch(error => console.error("Error playing alarm:", error));
-        }
-    }, [settings.alarmSound, settings.volume]);
 
-    // --- Core Logic: Handle Session End ---
+    // --- 3. Timer Engine ---
     const handleSessionEnd = useCallback((wasSkipped = false) => {
-        const sessionWasWork = mode === 'work';
-
-        // Calculate actual duration
-        const totalSeconds = initialTimeRef.current;
-        const elapsedSeconds = wasSkipped ? (totalSeconds - timeLeft) : totalSeconds;
+        const sessionWasWork = modeRef.current === 'work'; // Read from Ref for safety
+        const totalDuration = initialTimeRef.current;
+        const currentLeft = timeLeftRef.current;
+        
+        const elapsedSeconds = wasSkipped ? (totalDuration - currentLeft) : totalDuration;
         const elapsedMinutes = Math.floor(elapsedSeconds / 60);
 
         if (!wasSkipped) {
-            playAlarm();
+            // Audio & Notification
+            if (alarmRef.current) {
+                alarmRef.current.src = `/sounds/${settings.alarmSound}`;
+                alarmRef.current.volume = settings.volume || 1;
+                alarmRef.current.play().catch(() => {});
+            }
             if (settings.notificationOnFinish) {
-                const message = sessionWasWork ? "Time for a break!" : "Time to get back to focus!";
-                showNotification("Session Finished!", message);
+                showNotification("Timer Finished", sessionWasWork ? "Take a break!" : "Back to work!");
             }
         }
 
-        // Pass the calculated duration to the callback
-        if (onSessionCompleteRef.current) {
-            // Log if at least 1 minute passed
-            if (elapsedMinutes > 0) {
-                onSessionCompleteRef.current({
-                    sessionWasWork,
-                    duration: elapsedMinutes
-                });
-            }
+        // Log Session
+        if (onSessionCompleteRef.current && elapsedMinutes > 0) {
+            onSessionCompleteRef.current({ sessionWasWork, duration: elapsedMinutes });
         }
 
+        // Calculate Next Mode
         let nextMode = 'work';
         if (sessionWasWork && !wasSkipped) {
             const newCompleted = completedSessions + 1;
             setCompletedSessions(newCompleted);
-            nextMode = newCompleted > 0 && newCompleted % settings.longBreakInterval === 0 ? 'longBreak' : 'break';
-        } else {
-            nextMode = 'work';
+            nextMode = (newCompleted > 0 && newCompleted % settings.longBreakInterval === 0) ? 'longBreak' : 'break';
         }
 
+        // Transition
         const nextTime = getTimeForMode(nextMode);
+        
         setMode(nextMode);
+        modeRef.current = nextMode;
+        
         setTimeLeft(nextTime);
-        initialTimeRef.current = nextTime;
-        timeLeftRef.current = nextTime; // Update ref immediately to prevent race conditions
+        timeLeftRef.current = nextTime;
+        
+        initialTimeRef.current = nextTime; // Reset ring denominator
 
-        const shouldAutoStart = !wasSkipped && ((sessionWasWork && settings.autoStartBreaks) || (!sessionWasWork && settings.autoStartPomodoros));
+        // Auto-Start Check
+        const shouldAutoStart = !wasSkipped && (
+            (sessionWasWork && settings.autoStartBreaks) || 
+            (!sessionWasWork && settings.autoStartPomodoros)
+        );
 
         if (shouldAutoStart) {
-            endTimeRef.current = Date.now() + nextTime * 1000;
+            endTimeRef.current = Date.now() + (nextTime * 1000);
             setIsRunning(true);
         } else {
             setIsRunning(false);
         }
+    }, [completedSessions, settings, getTimeForMode]);
 
-    }, [mode, timeLeft, completedSessions, settings, playAlarm, getTimeForMode]);
 
-    // Timer Loop
     useEffect(() => {
         let interval = null;
         if (isRunning && timeLeft > 0) {
             interval = setInterval(() => {
                 const now = Date.now();
                 const difference = endTimeRef.current - now;
-                const remainingSeconds = Math.max(0, Math.ceil(difference / 1000));
+                const remaining = Math.max(0, Math.ceil(difference / 1000));
 
-                setTimeLeft(remainingSeconds);
-                // Ref is updated via the useEffect dependency on [timeLeft] above,
-                // but updating it here ensures synchronous access inside the loop if needed.
-                
-                if (remainingSeconds <= 0) {
+                setTimeLeft(remaining);
+                if (remaining <= 0) {
                     clearInterval(interval);
                     handleSessionEnd(false);
                 }
@@ -191,99 +239,95 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         return () => clearInterval(interval);
     }, [isRunning, timeLeft, handleSessionEnd]);
 
-    // Title Sync
-    useEffect(() => {
-        const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
-        const seconds = (timeLeft % 60).toString().padStart(2, '0');
-        const modeLabel = mode === 'work' ? 'Focus' : 'Break';
-        document.title = `${minutes}:${seconds} - ${modeLabel} | Work Station`;
-        return () => { document.title = "Work Station"; };
-    }, [timeLeft, mode]);
 
-    // --- NEW: Save on Unmount (The Fix) ---
-    useEffect(() => {
-        return () => {
-            // This code runs ONLY when the component unmounts (closes)
-            
-            // 1. Retrieve the latest values from our "Black Box" refs
-            const currentMode = modeRef.current;
-            const currentTime = timeLeftRef.current;
-            const initialTime = initialTimeRef.current;
-
-            // 2. Only save if it was a WORK session and wasn't finished (time > 0)
-            // If time == 0, handleSessionEnd already saved it.
-            if (currentMode === 'work' && currentTime > 0) {
-                const elapsedSeconds = initialTime - currentTime;
-                const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-
-                // 3. Threshold: Only save if > 1 minute elapsed
-                if (elapsedMinutes >= 1) {
-                    console.log("Unmount detected: Saving partial session of", elapsedMinutes, "mins");
-                    if (onSessionCompleteRef.current) {
-                        onSessionCompleteRef.current({
-                            sessionWasWork: true,
-                            duration: elapsedMinutes
-                        });
-                    }
-                }
-            }
-        };
-    }, []); // Empty dependency ensures this only runs on mount/unmount
-
-    useEffect(() => {
-        requestNotificationPermission();
-        if (typeof window !== 'undefined') {
-            alarmRef.current = new Audio();
-        }
-    }, []);
-
+    // --- 4. Controls ---
     const startTimer = () => {
-        endTimeRef.current = Date.now() + timeLeft * 1000;
+        if (timeLeft <= 0) return;
+        endTimeRef.current = Date.now() + (timeLeft * 1000);
         setIsRunning(true);
     };
 
     const pauseTimer = () => setIsRunning(false);
-    const skipMode = () => handleSessionEnd(true);
 
     const resetTimer = () => {
-        // 1. Check if we are in work mode (we only log work, not breaks)
+        // Log partial if work session
         if (mode === 'work') {
-            // Calculate how much time passed since the start
-            const elapsedSeconds = initialTimeRef.current - timeLeft;
-            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-
-            // 2. If user focused for at least 1 minute, SAVE IT
-            if (elapsedMinutes > 0 && onSessionCompleteRef.current) {
-                console.log("Saving cancelled session:", elapsedMinutes, "minutes");
-                onSessionCompleteRef.current({
-                    sessionWasWork: true,
-                    duration: elapsedMinutes
-                });
+            const elapsed = Math.floor((initialTimeRef.current - timeLeft) / 60);
+            if (elapsed > 0 && onSessionCompleteRef.current) {
+                onSessionCompleteRef.current({ sessionWasWork: true, duration: elapsed });
             }
         }
-
-        // 3. Now actually reset the timer visual state
+        
         setIsRunning(false);
-        const time = getTimeForMode(mode);
-        setTimeLeft(time);
-        initialTimeRef.current = time;
-        timeLeftRef.current = time; // Sync ref
+        const t = getTimeForMode(mode);
+        setTimeLeft(t);
+        initialTimeRef.current = t; // Reset ring
+        timeLeftRef.current = t;
+        
+        // Clear persistence for a clean slate
+        localStorage.removeItem('pomodoro_state');
     };
 
+    const skipMode = () => handleSessionEnd(true);
+
+    const switchMode = (newMode) => {
+        if (isRunning) return; // Prevent accidental switches while running
+        const t = getTimeForMode(newMode);
+        setMode(newMode);
+        setTimeLeft(t);
+        initialTimeRef.current = t;
+        timeLeftRef.current = t;
+    };
+    
     const updateSettings = (newSettings) => {
-        setIsRunning(false);
         setSettings(prev => ({ ...prev, ...newSettings }));
+        // Note: We don't auto-reset timer here to be non-intrusive, 
+        // unless they explicitly reset.
     };
 
-    const progress = initialTimeRef.current > 0 ? ((initialTimeRef.current - timeLeft) / initialTimeRef.current) * 100 : 0;
+    // Calculate Progress (Safety check for divide by zero)
+    const progress = initialTimeRef.current > 0 
+        ? ((initialTimeRef.current - timeLeft) / initialTimeRef.current) * 100 
+        : 0;
+
+    // Browser Title Sync
+    useEffect(() => {
+        if (!isStoreLoaded) return;
+        const m = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+        const s = (timeLeft % 60).toString().padStart(2, '0');
+        const label = mode === 'work' ? 'Focus' : (mode === 'break' ? 'Short Break' : 'Long Break');
+        document.title = `${m}:${s} - ${label} | Work Station`;
+        return () => { document.title = "Work Station"; };
+    }, [timeLeft, mode, isStoreLoaded]);
+
+    // Save on Unmount (Cleanup Guard)
+    useEffect(() => {
+        return () => {
+            const cMode = modeRef.current;
+            const cTime = timeLeftRef.current;
+            const cInit = initialTimeRef.current;
+            
+            if (cMode === 'work' && cTime > 0) {
+                const eMin = Math.floor((cInit - cTime) / 60);
+                if (eMin >= 1 && onSessionCompleteRef.current) {
+                    onSessionCompleteRef.current({ sessionWasWork: true, duration: eMin });
+                }
+            }
+        };
+    }, []);
 
     return {
-        timeLeft, isRunning, mode, progress, settings,
-        startTimer, pauseTimer, updateSettings, resetTimer, skipMode,
-        setMode: (newMode) => {
-            if (!isRunning) {
-                setMode(newMode);
-            }
-        },
+        isStoreLoaded, // <--- Exposed for UI handling
+        timeLeft, 
+        isRunning, 
+        mode, 
+        progress, 
+        settings,
+        startTimer, 
+        pauseTimer, 
+        updateSettings, 
+        resetTimer, 
+        skipMode,
+        setMode: switchMode,
     };
 }

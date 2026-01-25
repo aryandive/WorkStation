@@ -1,18 +1,56 @@
 "use client";
 
-import { createContext, useState, useContext, useMemo } from 'react';
+import { createContext, useState, useContext, useMemo, useEffect } from 'react';
+import { ANIMATED_SCENES } from '@/lib/environmentConfig';
 
 const EnvironmentContext = createContext(null);
 
+// HYBRID MODEL: Default is Local MP4 (Instant Load, High Quality)
+const DEFAULT_SCENE = { 
+    type: 'video', 
+    path: '/videos/cosy.mp4',
+    name: 'Cosy Ambience'
+};
+
 export function EnvironmentProvider({ children }) {
-    const [activeScene, setActiveScene] = useState({ type: 'video', path: '/videos/cosy.mp4' });
-    // Track the scene used before YouTube started so we can restore it
+    // Start with Default to prevent null crashes, but 'isLoaded' gates the visual render
+    const [activeScene, setActiveScene] = useState(DEFAULT_SCENE);
     const [lastActiveScene, setLastActiveScene] = useState(null);
 
     const [activeSounds, setActiveSounds] = useState([]);
     const [soundVolumes, setSoundVolumes] = useState({});
     const [youtube, setYoutube] = useState({ id: null, showPlayer: true, isMuted: true, showControls: false });
     const [isGlobalPlaying, setIsGlobalPlaying] = useState(true);
+    
+    // THE SHIELD: Prevents "Flash" of wrong content on refresh
+    const [isLoaded, setIsLoaded] = useState(false); 
+
+    // --- Persistence Logic ---
+    useEffect(() => {
+        // 1. Read LocalStorage
+        try {
+            const savedScene = localStorage.getItem('ws_activeScene');
+            if (savedScene) {
+                const parsed = JSON.parse(savedScene);
+                // Validation: Ensure saved data isn't corrupted
+                if (parsed && (parsed.type || parsed.videoId || parsed.path)) {
+                    setActiveScene(parsed);
+                }
+            }
+        } catch (e) {
+            console.warn("Failed to load saved environment:", e);
+        } finally {
+            // 2. Lift the Shield (Allow MasterPlayer to render)
+            setIsLoaded(true);
+        }
+    }, []);
+
+    // Save state whenever it changes (only after initial load)
+    useEffect(() => {
+        if (isLoaded) {
+            localStorage.setItem('ws_activeScene', JSON.stringify(activeScene));
+        }
+    }, [activeScene, isLoaded]);
 
     const value = useMemo(() => {
         const playScene = (scene) => {
@@ -37,7 +75,6 @@ export function EnvironmentProvider({ children }) {
             setSoundVolumes(v => ({ ...v, [soundUrl]: volume }));
         };
 
-        // Note: Ideally move this to lib/utils.js to avoid duplication with EnvironmentPanel.js
         const getYoutubeId = (url) => {
             try {
                 const urlObj = new URL(url);
@@ -60,20 +97,15 @@ export function EnvironmentProvider({ children }) {
             if (videoId) {
                 const { isCustom = false } = options;
 
-                // Save the current scene before switching to YouTube, if it's not already null
                 if (activeScene.type !== null) {
                     setLastActiveScene(activeScene);
                 }
-
-                playScene({ type: null, path: null });
 
                 setYoutube(y => ({
                     ...y,
                     id: videoId,
                     showPlayer: true,
                     isMuted: true,
-                    // If it's a custom video (user pasted), show controls by default. 
-                    // Otherwise keep previous state or default to hidden.
                     showControls: isCustom ? true : false
                 }));
                 setIsGlobalPlaying(true);
@@ -84,12 +116,8 @@ export function EnvironmentProvider({ children }) {
 
         const stopYoutube = () => {
             setYoutube(y => ({ ...y, id: null }));
-
-            // Restore the previous scene if it exists, otherwise default to Cosy Room
-            if (lastActiveScene && lastActiveScene.path) {
-                playScene(lastActiveScene);
-            } else {
-                playScene({ type: 'video', path: '/videos/cosy.mp4' });
+            if (lastActiveScene) {
+                setActiveScene(lastActiveScene);
             }
         };
 
@@ -99,11 +127,11 @@ export function EnvironmentProvider({ children }) {
         const toggleGlobalPlay = () => setIsGlobalPlaying(p => !p);
 
         return {
-            activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying,
+            activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying, isLoaded,
             playScene, toggleSound, changeVolume, playYoutube, stopYoutube,
             setYoutubeShowPlayer, setYoutubeMute, toggleGlobalPlay, setYoutubeShowControls
         };
-    }, [activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying, lastActiveScene]);
+    }, [activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying, lastActiveScene, isLoaded]);
 
     return (
         <EnvironmentContext.Provider value={value}>

@@ -8,19 +8,16 @@ import SessionSettings from '@/components/pomodoro/SessionSettings';
 import ProgressCircle from '@/components/pomodoro/ProgressCircle';
 import TimerControls from '@/components/pomodoro/TimerControls';
 import { createClient } from '@/utils/supabase/client';
-import { LinkIcon, Settings, X } from 'lucide-react';
+import { LinkIcon, Settings, X, Loader2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
-// --- Local Sound Helper ---
 const useKeyboardSound = () => {
     const audioRef = useRef(null);
     useEffect(() => {
-        if (typeof window !== 'undefined') {
-            audioRef.current = new Audio();
-        }
+        if (typeof window !== 'undefined') audioRef.current = new Audio();
     }, []);
     return (src) => {
         if (audioRef.current) {
@@ -37,20 +34,18 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     const [linkedTask, setLinkedTask] = useState(null);
     const [isMinimized, setIsMinimized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-    // --- NEW: Draggable State & Refs ---
+    
+    // Draggable State
     const [position, setPosition] = useState({ x: 0, y: 0 });
-    const isDraggingRef = useRef(false); // Track if we are currently dragging
-    const draggableNodeRef = useRef(null); // <--- FIXED: Moved Ref here (Top Level)
+    const isDraggingRef = useRef(false);
+    const draggableNodeRef = useRef(null);
 
     const supabase = createClient();
     const playSound = useKeyboardSound();
     const { saveSession } = useSessionLogger();
-
     const linkedTaskRef = useRef(linkedTask);
-    useEffect(() => {
-        linkedTaskRef.current = linkedTask;
-    }, [linkedTask]);
+
+    useEffect(() => { linkedTaskRef.current = linkedTask; }, [linkedTask]);
 
     const handleSessionComplete = useCallback(({ sessionWasWork, duration }) => {
         if (sessionWasWork && duration > 0) {
@@ -58,13 +53,14 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                 duration,
                 taskId: linkedTaskRef.current ? linkedTaskRef.current.id : null
             });
-            if (linkedTaskRef.current && onTaskTimeUpdateRef && typeof onTaskTimeUpdateRef.current === 'function') {
+            if (linkedTaskRef.current && onTaskTimeUpdateRef?.current) {
                 onTaskTimeUpdateRef.current(linkedTaskRef.current.id, 1);
             }
         }
     }, [onTaskTimeUpdateRef, saveSession]);
 
     const {
+        isStoreLoaded, // <--- NEW PROP
         timeLeft, isRunning, mode, progress, settings,
         startTimer, pauseTimer, resetTimer, skipMode, updateSettings, setMode,
     } = usePomodoroTimer({ onSessionComplete: handleSessionComplete });
@@ -73,13 +69,6 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         work: { button: 'bg-yellow-500/80 text-white hover:bg-yellow-600/80', progress: 'text-yellow-500' },
         break: { button: 'bg-green-500/80 text-white hover:bg-green-600/80', progress: 'text-green-500' },
         longBreak: { button: 'bg-blue-500/80 text-white hover:bg-blue-600/80', progress: 'text-blue-500' },
-    };
-
-    // --- Recenter Logic ---
-    const handleRecenter = () => {
-        if (!isDraggingRef.current) {
-            setPosition({ x: 0, y: 0 });
-        }
     };
 
     // Keyboard shortcuts
@@ -101,32 +90,46 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                     else if (!isMinimized) setIsMinimized(true);
                     else setIsOpen(false);
                     break;
-                default: break;
             }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, isRunning, isMinimized, isSettingsOpen, startTimer, pauseTimer, skipMode, resetTimer, setIsSettingsOpen, setIsMinimized, setIsOpen, playSound]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isOpen, isRunning, isMinimized, isSettingsOpen, startTimer, pauseTimer, skipMode, resetTimer, playSound]);
 
     // Data Fetching
     useEffect(() => {
         if (isOpen) {
-            const fetchUserAndTasks = async () => {
+            const fetchTasks = async () => {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
-                    const { data, error } = await supabase.from('todos').select('id, task').eq('user_id', user.id).eq('is_complete', false).is('parent_task_id', null);
-                    if (error) console.error('Error fetching tasks for pomodoro:', error);
-                    else setTasks(data || []);
+                    const { data } = await supabase.from('todos').select('id, task').eq('user_id', user.id).eq('is_complete', false).is('parent_task_id', null);
+                    setTasks(data || []);
                 } else {
-                    const localTasks = JSON.parse(localStorage.getItem('ws_tasks')) || [];
-                    setTasks(localTasks.filter(t => !t.is_complete && !t.parent_task_id));
+                    const local = JSON.parse(localStorage.getItem('ws_tasks')) || [];
+                    setTasks(local.filter(t => !t.is_complete && !t.parent_task_id));
                 }
             };
-            fetchUserAndTasks();
+            fetchTasks();
         }
     }, [isOpen, supabase]);
 
     if (!isOpen) return null;
+
+    // --- FLASH PREVENTION FIX ---
+    // Don't render content until state is fully restored from localStorage
+    if (!isStoreLoaded) {
+        return (
+            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in backdrop-blur-sm">
+                <Card className="w-full max-w-sm bg-gray-900/90 border-gray-700/50">
+                    <CardContent className="h-[400px] flex items-center justify-center">
+                        <Loader2 className="h-8 w-8 animate-spin text-yellow-500" />
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     const minutes = Math.floor(timeLeft / 60).toString().padStart(2, '0');
     const seconds = (timeLeft % 60).toString().padStart(2, '0');
 
@@ -134,40 +137,25 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         return (
             <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
                 <Draggable
-                    nodeRef={draggableNodeRef} // <--- FIXED: Using the top-level ref
+                    nodeRef={draggableNodeRef}
                     position={position}
                     handle=".drag-handle"
                     onStart={() => { isDraggingRef.current = false; }}
-                    onDrag={(e, data) => { 
-                        setPosition({ x: data.x, y: data.y });
-                        isDraggingRef.current = true;
-                    }}
-                    onStop={() => {
-                        setTimeout(() => { isDraggingRef.current = false; }, 100);
-                    }}
+                    onDrag={(e, data) => { setPosition({ x: data.x, y: data.y }); isDraggingRef.current = true; }}
+                    onStop={() => { setTimeout(() => { isDraggingRef.current = false; }, 100); }}
                 >
-                    <div 
-                        ref={draggableNodeRef} // <--- FIXED: Attached ref here for Draggable
-                        className="pointer-events-auto flex flex-col items-center group"
-                    >
+                    <div ref={draggableNodeRef} className="pointer-events-auto flex flex-col items-center group">
                         <h3 className="text-white/80 text-lg font-semibold drop-shadow-lg mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                             {linkedTask?.task || 'Focus Session'}
                         </h3>
-                        
                         <span className="text-8xl font-bold text-white tabular-nums drop-shadow-2xl cursor-default select-none">
                             {minutes}:{seconds}
                         </span>
-                        
                         <div className="flex gap-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                             <TimerControls 
-                                isRunning={isRunning} 
-                                startTimer={startTimer} 
-                                pauseTimer={pauseTimer} 
-                                resetTimer={resetTimer} 
-                                skipMode={skipMode} 
-                                isMinimized={true} 
-                                maximize={() => setIsMinimized(false)}
-                                onRecenter={handleRecenter}
+                                isRunning={isRunning} startTimer={startTimer} pauseTimer={pauseTimer} 
+                                resetTimer={resetTimer} skipMode={skipMode} isMinimized={true} 
+                                maximize={() => setIsMinimized(false)} onRecenter={() => setPosition({x:0, y:0})}
                             />
                         </div>
                     </div>
@@ -188,9 +176,16 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                 </CardHeader>
                 <CardContent className="flex flex-col items-center p-6 pt-2">
                     <div className="flex gap-2 bg-gray-800/50 p-1 rounded-lg mb-4">
-                        <Button onClick={() => setMode('work')} variant="ghost" className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === 'work' && colorMap.work.button)}>Focus</Button>
-                        <Button onClick={() => setMode('break')} variant="ghost" className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === 'break' && colorMap.break.button)}>Short Break</Button>
-                        <Button onClick={() => setMode('longBreak')} variant="ghost" className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === 'longBreak' && colorMap.longBreak.button)}>Long Break</Button>
+                        {['work', 'break', 'longBreak'].map(m => (
+                            <Button 
+                                key={m}
+                                onClick={() => setMode(m)} 
+                                variant="ghost" 
+                                className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === m && colorMap[m].button)}
+                            >
+                                {m === 'work' ? 'Focus' : m === 'break' ? 'Short Break' : 'Long Break'}
+                            </Button>
+                        ))}
                     </div>
                     <div className="relative my-4">
                         <ProgressCircle progress={progress} colorClass={colorMap[mode].progress} />
@@ -222,4 +217,4 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
             <SessionSettings isOpen={isSettingsOpen} setIsOpen={setIsSettingsOpen} settings={settings} updateSettings={updateSettings} isRunning={isRunning} />
         </div>
     );
-} 
+}

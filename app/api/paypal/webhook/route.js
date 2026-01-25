@@ -1,78 +1,74 @@
 // app/api/paypal/webhook/route.js
 export const runtime = 'nodejs';
+
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyPayPalWebhook } from '@/lib/paypal';
 
 export async function POST(request) {
-    console.log('🔄 --- WEBHOOK RECEIVED --- 🔄');
-
-    const rawBody = await request.text();
     const headersList = request.headers;
+    const transmissionId = headersList.get('paypal-transmission-id') || 'unknown';
+    const timestamp = new Date().toISOString();
 
-    // 🛑 SAFETY CHECK: Ensure body is not empty
-    if (!rawBody) {
-        console.warn('⚠️ Received empty webhook body. Ignoring.');
-        return NextResponse.json({ error: 'Empty body' }, { status: 400 });
+    console.log(`[Webhook] 🔵 Received ${transmissionId} at ${timestamp}`);
+
+    let rawBody;
+    try {
+        rawBody = await request.text();
+        if (!rawBody) throw new Error('Empty request body');
+    } catch (err) {
+        console.error(`[Webhook] 🔴 Read Error: ${err.message}`);
+        return NextResponse.json({ error: 'Body read failed' }, { status: 400 });
     }
 
-    // 1. SECURITY VERIFICATION (Skip in dev/ngrok if needed, but keep for production)
+    // 1. SECURITY: Verify Signature
+    // We strictly enforce this in production to prevent spoofing.
     if (process.env.NODE_ENV !== 'development') {
         try {
-            const isValid = await verifyPayPalWebhook(headersList, rawBody);
-            if (!isValid) {
-                console.error('❌ SIGNATURE VERIFICATION FAILED');
-                return NextResponse.json({ error: 'Invalid signature' }, { status: 400 });
-            }
+            await verifyPayPalWebhook(headersList, rawBody);
+            console.log(`[Webhook] 🟢 Signature Verified: ${transmissionId}`);
         } catch (err) {
-            console.error('⚠️ Verification Error:', err.message);
+            console.error(`[Webhook] ⛔ Verification Failed: ${err.message}`);
+            return NextResponse.json({ error: err.message }, { status: 400 });
         }
+    } else {
+        console.log(`[Webhook] ⚠️ Skipping verification in Development`);
     }
 
+    // 2. PARSE EVENT
     let body;
     try {
         body = JSON.parse(rawBody);
     } catch (err) {
-        console.error('❌ JSON PARSE ERROR:', err.message);
         return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 });
     }
 
-    // Init Supabase Admin
+    const eventType = body.event_type;
+    const resource = body.resource;
+    
+    console.log(`[Webhook] 📨 Processing Event: ${eventType}`);
+
+    // 3. DATABASE ACTION
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL,
         process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
     try {
-        const resource = body.resource;
-        const eventType = body.event_type;
-
-        console.log(`📨 Event Type: ${eventType}`);
-
-        // ====================================================
-        // 2. HANDLE SUBSCRIPTION ACTIVATION
-        // ====================================================
+        // --- CASE A: Subscription Activated ---
         if (eventType === 'BILLING.SUBSCRIPTION.ACTIVATED') {
             const userId = resource.custom_id;
             const planId = resource.plan_id;
 
-            // 🛡️ ZOMBIE KILLER: Ignore events with no User ID
             if (!userId) {
-                console.log(`👻 Ignoring Ghost Event (No custom_id). Date: ${resource.create_time}`);
-                return NextResponse.json({ received: true });
+                console.warn(`[Webhook] ⚠️ Activation received without User ID (custom_id)`);
+                return NextResponse.json({ status: 'ignored_no_user' });
             }
-
-            console.log(`✅ PROCESSING PAYMENT for User: ${userId}`);
 
             // Determine Tier
-            let tier = 'pro';
-            if (planId === process.env.NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID) {
-                tier = 'pro_monthly';
-            } else if (planId === process.env.NEXT_PUBLIC_PAYPAL_YEARLY_PLAN_ID) {
-                tier = 'pro_yearly';
-            }
+            const isMonthly = planId === process.env.NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID;
+            const tier = isMonthly ? 'pro_monthly' : 'pro_yearly';
 
-            // Upsert into Database
             const { error } = await supabase
                 .from('subscriptions')
                 .upsert({
@@ -84,26 +80,18 @@ export async function POST(request) {
                     updated_at: new Date().toISOString(),
                 }, { onConflict: 'user_id' });
 
-            if (error) {
-                console.error('❌ DATABASE ERROR:', error);
-                return NextResponse.json({ error: error.message }, { status: 500 });
-            }
-
-            console.log('🎉 SUCCESS: Subscription saved to Supabase!');
+            if (error) throw error;
+            console.log(`[Webhook] ✅ Activated Pro for User: ${userId}`);
         }
 
-        // ====================================================
-        // 3. HANDLE CANCELLATION / STATUS CHANGE
-        // ====================================================
+        // --- CASE B: Status Changes (Cancel/Suspend/Expire) ---
         else if (
-            eventType === 'BILLING.SUBSCRIPTION.CANCELLED' ||
-            eventType === 'BILLING.SUBSCRIPTION.SUSPENDED' ||
-            eventType === 'BILLING.SUBSCRIPTION.EXPIRED'
+            ['BILLING.SUBSCRIPTION.CANCELLED', 
+             'BILLING.SUBSCRIPTION.SUSPENDED', 
+             'BILLING.SUBSCRIPTION.EXPIRED'].includes(eventType)
         ) {
             const subscriptionId = resource.id;
             const newStatus = resource.status.toLowerCase();
-
-            console.log(`⚠️ STATUS UPDATE: ${subscriptionId} is now ${newStatus}`);
 
             const { error } = await supabase
                 .from('subscriptions')
@@ -113,13 +101,15 @@ export async function POST(request) {
                 })
                 .eq('paypal_subscription_id', subscriptionId);
 
-            if (error) console.error('❌ DB ERROR:', error);
-            else console.log('✅ Status updated in DB');
+            if (error) throw error;
+            console.log(`[Webhook] ⚠️ Subscription ${subscriptionId} changed to ${newStatus}`);
         }
+
         return NextResponse.json({ received: true });
 
     } catch (error) {
-        console.error('💥 SERVER ERROR:', error);
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error(`[Webhook] 💥 Processing Error:`, error);
+        // Return 500 so PayPal knows to retry later (if it was a temp DB issue)
+        return NextResponse.json({ error: 'Internal processing failed' }, { status: 500 });
     }
 }
