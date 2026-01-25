@@ -15,7 +15,7 @@ import MasterPlayer from '@/components/environment/MasterPlayer';
 import TopRightNav from '@/components/TopRightNav';
 import SignUpModal from '@/components/auth/SignUpModal';
 import { cn } from '@/lib/utils';
-import { Play, Pause } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react'; // Replaced Play/Pause with Eye/EyeOff
 import { Button } from '@/components/ui/button';
 
 export default function PomodoroTimerPage() {
@@ -23,18 +23,26 @@ export default function PomodoroTimerPage() {
   const [isPomodoroOpen, setIsPomodoroOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEnvironmentPanelOpen, setIsEnvironmentPanelOpen] = useState(false);
+  
+  // Hover States for "Peek" functionality in Zen Mode
   const [isFeatureNavHovered, setIsFeatureNavHovered] = useState(false);
   const [isTopHovered, setIsTopHovered] = useState(false);
   const [isBottomHovered, setIsBottomHovered] = useState(false);
 
-  const { isGlobalPlaying, toggleGlobalPlay, youtube } = useEnvironment();
+  // Zen Mode State (Default: False = UI Visible)
+  const [isZenMode, setIsZenMode] = useState(false);
+
+  // Contexts
+  const { toggleGlobalPlay } = useEnvironment(); // Kept in case you want to map it to a keybind later, but removed from UI
   const { user, isSignUpModalOpen, openSignUpModal, closeSignUpModal } = useAuth();
   const router = useRouter();
   const updateTaskTimeRef = useRef(null);
 
-  // Logic: UI is visible if NOT playing video, OR if user is hovering over any UI zone
-  const isVideoMode = youtube.id && youtube.showPlayer;
-  const isUiVisible = !isVideoMode || isTopHovered || isBottomHovered || isFeatureNavHovered;
+  // --- Visibility Logic ---
+  // UI is visible if:
+  // 1. Zen Mode is OFF (!isZenMode)
+  // 2. OR User is hovering over any UI zone (isTopHovered, etc.)
+  const isUiVisible = !isZenMode || isTopHovered || isBottomHovered || isFeatureNavHovered;
 
   // --- Funnel Logic ---
   const handleJournalClick = (e) => {
@@ -73,16 +81,26 @@ export default function PomodoroTimerPage() {
           onMouseEnter={() => setIsTopHovered(true)}
           onMouseLeave={() => setIsTopHovered(false)}
         >
-          {/* Top Left: Logo & Goal */}
+          {/* Top Left: Logo, Goal & Zen Toggle */}
           <div className={cn("flex flex-col gap-4", fadeClass)}>
             <Image width={50} height={50} src="/logo.jpg" alt="Work Station Logo" className="rounded-md" />
             <div>
               <h2 className='text-gray-300 text-sm tracking-widest'>TODAY&apos;S FOCUS</h2>
               <h1 className='text-2xl font-bold text-white'>Focus Goal</h1>
             </div>
-            <Button onClick={toggleGlobalPlay} variant="outline" size="icon" className="bg-black/20 border-white/20 hover:bg-white/20 text-white rounded-full backdrop-blur-sm">
-              {isGlobalPlaying ? <Pause size={20} /> : <Play size={20} />}
-            </Button>
+            
+            {/* Zen Mode Toggle (Replaces Play/Pause) */}
+            <div className="flex items-center gap-2">
+                <Button 
+                    onClick={() => setIsZenMode(!isZenMode)} 
+                    variant="outline" 
+                    size="icon" 
+                    className="bg-black/20 border-white/20 hover:bg-white/20 text-white rounded-full backdrop-blur-sm transition-all"
+                >
+                    {isZenMode ? <EyeOff size={20} /> : <Eye size={20} />}
+                </Button>
+                {!isZenMode && <span className="text-xs text-white/50">Hide UI</span>}
+            </div>
           </div>
 
           {/* Top Right: Nav & Time */}
@@ -148,6 +166,10 @@ export default function PomodoroTimerPage() {
 
         <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={closeSignUpModal} />
 
+        {/* Tools Layer (Z-50) 
+            These remain visible regardless of Zen Mode because they are tools the user 
+            might be using actively while "in the zone".
+        */}
         <div className="pointer-events-auto relative z-50">
           {isPomodoroOpen && <PomodoroTimer isOpen={isPomodoroOpen} setIsOpen={setIsPomodoroOpen} onTaskTimeUpdateRef={updateTaskTimeRef} />}
           {isTodoOpen && <TodoList isOpen={isTodoOpen} setIsOpen={setIsTodoOpen} onTaskTimeUpdateRef={updateTaskTimeRef} />}

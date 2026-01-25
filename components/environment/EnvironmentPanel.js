@@ -13,19 +13,19 @@ import {
     X, Youtube, Video, Music, Volume2, VolumeX, ImageIcon, Info, Timer,
     CloudRain, Flame, Wind, Waves, CloudLightning, Trees, Radio, Sparkles, Moon,
     Link as LinkIcon, Monitor, Play, MonitorPlay, Settings2, Bookmark, Trash2, Loader2,
-    ChevronDown, ChevronUp, LayoutGrid, Image as LucideImage, Plus, HardDrive
+    ChevronDown, ChevronUp, LayoutGrid, Image as LucideImage, Plus, HardDrive, AlertCircle, Wifi, ArrowDownToLine
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getYoutubeId } from '@/lib/utils';
 import { createClient } from '@/utils/supabase/client';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ANIMATED_SCENES, STATIC_CATEGORIES, STATIC_IMAGES } from '@/lib/environmentConfig';
 
-// --- IndexedDB Helpers (Simple Storage) ---
+// --- IndexedDB Helpers ---
 const DB_NAME = 'EnvironmentAssetsDB';
 const DB_VERSION = 1;
 
 const initDB = () => {
+    if (typeof window === 'undefined') return Promise.resolve(null);
     return new Promise((resolve, reject) => {
         const request = indexedDB.open(DB_NAME, DB_VERSION);
         request.onupgradeneeded = (event) => {
@@ -40,6 +40,7 @@ const initDB = () => {
 
 const saveToDB = async (storeName, item) => {
     const db = await initDB();
+    if (!db) return;
     return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
@@ -51,6 +52,7 @@ const saveToDB = async (storeName, item) => {
 
 const getAllFromDB = async (storeName) => {
     const db = await initDB();
+    if (!db) return [];
     return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readonly');
         const store = tx.objectStore(storeName);
@@ -62,6 +64,7 @@ const getAllFromDB = async (storeName) => {
 
 const deleteFromDB = async (storeName, id) => {
     const db = await initDB();
+    if (!db) return;
     return new Promise((resolve, reject) => {
         const tx = db.transaction(storeName, 'readwrite');
         const store = tx.objectStore(storeName);
@@ -74,6 +77,7 @@ const deleteFromDB = async (storeName, id) => {
 // --- Helper Functions ---
 function localGetYoutubeId(url) {
     try {
+        if (!url) return null;
         const u = new URL(url);
         const host = u.hostname;
         if (host.includes('youtu.be')) return u.pathname.split('/').filter(Boolean)[0] || null;
@@ -113,6 +117,114 @@ const MAX_SAVED_VIDEOS = 10;
 const MAX_CUSTOM_SCENES = 5;
 const MAX_CUSTOM_IMAGES = 12;
 
+// --- Sub-Components (Clean Code) ---
+
+const HighDataDisclaimer = ({ isBottom, onDismiss }) => (
+    <div className={cn(
+        "bg-yellow-950/30 border border-yellow-500/20 rounded-xl p-3 flex items-start gap-3 transition-all duration-500",
+        isBottom ? "mb-0 mt-8 animate-in fade-in slide-in-from-top-4" : "mb-6 animate-in fade-in slide-in-from-top-1"
+    )}>
+        <div className="p-2 bg-yellow-500/10 rounded-lg shrink-0">
+            <Wifi className="w-4 h-4 text-yellow-400" />
+        </div>
+        <div className="text-sm text-gray-300 flex-1">
+            <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-white mb-0.5">High Quality Streaming</h4>
+                {!isBottom && (
+                    <button onClick={onDismiss} className="text-gray-400 hover:text-white transition-colors">
+                        <X size={16} />
+                    </button>
+                )}
+            </div>
+            <p className="opacity-90 text-xs leading-relaxed">
+                This setting uses highest quality video for maximum immersion. 
+                Animated scenes require significant data to run smoothly. 
+                We recommend <strong>Wi-Fi</strong> or switching to <strong>Static Backgrounds</strong> if you have limited internet speed.
+            </p>
+        </div>
+    </div>
+);
+
+const StudyModeTip = ({ isBottom, onDismiss }) => (
+    <div className={cn(
+        "bg-gradient-to-r from-red-900/30 to-orange-900/30 border border-red-500/20 rounded-xl p-4 flex items-start gap-3 transition-all duration-500",
+        isBottom ? "mb-0 mt-8 animate-in fade-in slide-in-from-top-4" : "mb-0 animate-in fade-in slide-in-from-top-1"
+    )}>
+        <div className="p-2 bg-red-500/10 rounded-lg shrink-0">
+            <MonitorPlay className="w-5 h-5 text-red-400" />
+        </div>
+        <div className="text-sm text-gray-300 flex-1">
+            <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-white mb-1">Study Mode</h4>
+                {!isBottom && (
+                    <button onClick={onDismiss} className="text-gray-400 hover:text-white transition-colors">
+                        <X size={16} />
+                    </button>
+                )}
+            </div>
+            <p className="opacity-90">Paste a lecture or tutorial link below. <span className="text-red-400 font-semibold">Tip:</span> Use longer videos (1 hour+) for uninterrupted focus.</p>
+        </div>
+    </div>
+);
+
+function SceneButton({ scene, isActive, onClick }) {
+    const preventTheft = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+    };
+
+    const renderMedia = () => {
+        if (scene.type === 'video') {
+            return (
+                <video 
+                    src={scene.url} 
+                    className="object-cover w-full h-full select-none" 
+                    muted 
+                    loop 
+                    onMouseOver={e => e.target.play().catch(()=>{})} 
+                    onMouseOut={e => e.target.pause()}
+                    onContextMenu={preventTheft}
+                    onDragStart={preventTheft}
+                    draggable={false}
+                />
+            );
+        }
+        return (
+            <Image 
+                src={scene.thumbnail || '/placeholder.jpg'} 
+                alt={scene.name || 'Scene'} 
+                fill 
+                sizes="(max-width: 768px) 33vw, 20vw" 
+                className="object-cover group-hover:scale-105 transition-transform duration-300 select-none"
+                onContextMenu={preventTheft}
+                onDragStart={preventTheft}
+                draggable={false}
+            />
+        );
+    };
+
+    return (
+        <button 
+            onClick={onClick} 
+            className={cn(
+                "rounded-lg overflow-hidden border-2 transition-all group relative aspect-[16/9] w-full select-none", 
+                isActive ? "border-yellow-400 ring-2 ring-yellow-400/50" : "border-transparent hover:border-gray-600 bg-black/40"
+            )}
+            onContextMenu={preventTheft} 
+        >
+            {renderMedia()}
+            {/* z-20 layer for protection */}
+            <div className="absolute inset-0 z-20" onContextMenu={preventTheft} />
+            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 z-30 pointer-events-none">
+                <p className="text-xs font-medium text-center text-white truncate">{scene.name}</p>
+            </div>
+        </button>
+    );
+}
+
+// --- Main Component ---
+
 export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     const {
         activeScene, activeSounds, soundVolumes, youtube,
@@ -133,11 +245,37 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     const [customImages, setCustomImages] = useState([]);
     const [isUploading, setIsUploading] = useState(false);
 
-    // --- Library State (For YouTube Tab) ---
+    // --- Library State ---
     const [savedVideos, setSavedVideos] = useState([]);
     const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const supabase = createClient();
+
+    // --- UX State: Banner Positions ---
+    const [dataDisclaimerAtBottom, setDataDisclaimerAtBottom] = useState(false);
+    const [studyTipAtBottom, setStudyTipAtBottom] = useState(false);
+    const [preferencesLoaded, setPreferencesLoaded] = useState(false);
+
+    // Initialize Preferences from LocalStorage on Mount
+    useEffect(() => {
+        const savedDataDisclaimer = localStorage.getItem('env_disclaimer_docked') === 'true';
+        const savedStudyTip = localStorage.getItem('env_studytip_docked') === 'true';
+        
+        setDataDisclaimerAtBottom(savedDataDisclaimer);
+        setStudyTipAtBottom(savedStudyTip);
+        setPreferencesLoaded(true);
+    }, []);
+
+    // Handlers for Dismissing Banners
+    const dismissDataDisclaimer = () => {
+        setDataDisclaimerAtBottom(true);
+        localStorage.setItem('env_disclaimer_docked', 'true');
+    };
+
+    const dismissStudyTip = () => {
+        setStudyTipAtBottom(true);
+        localStorage.setItem('env_studytip_docked', 'true');
+    };
 
     // Load Local Custom Assets on Mount
     useEffect(() => {
@@ -147,7 +285,6 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                     const scenes = await getAllFromDB('custom_videos');
                     const images = await getAllFromDB('custom_images');
                     
-                    // Create Object URLs for preview
                     const scenesWithUrls = scenes.map(s => ({ ...s, url: URL.createObjectURL(s.blob) }));
                     const imagesWithUrls = images.map(i => ({ ...i, url: URL.createObjectURL(i.blob) }));
                     
@@ -246,7 +383,6 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
 
     const handleDeleteCustom = async (type, id) => {
         try {
-            // Delete from IndexedDB first
             if (type === 'video') {
                 await deleteFromDB('custom_videos', id);
                 setCustomScenes(prev => prev.filter(i => i.id !== id));
@@ -262,9 +398,26 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     // --- Handlers for YouTube ---
     const handleYoutubePlay = (url) => {
         setYoutubeError('');
+        
+        if(!url || url.trim() === '') {
+            setYoutubeError('Please enter a YouTube URL.');
+            return;
+        }
+
+        const id = localGetYoutubeId(url);
+        if(!id) {
+             setYoutubeError('Invalid YouTube URL format.');
+             return;
+        }
+
         const success = playYoutube(url, { isCustom: true });
-        if (success) setYoutubeUrl('');
-        else setYoutubeError('Invalid YouTube URL.');
+        
+        if (success) {
+            setYoutubeUrl('');
+            setYoutubeShowControls(true); 
+        } else {
+            setYoutubeError('Could not load video.');
+        }
     };
 
     const handleSaveToLibrary = async () => {
@@ -272,7 +425,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
             setYoutubeError(`Limit reached (${MAX_SAVED_VIDEOS}). Delete videos to save more.`);
             return;
         }
-        const videoId = typeof getYoutubeId === 'function' ? getYoutubeId(youtubeUrl) : localGetYoutubeId(youtubeUrl);
+        const videoId = localGetYoutubeId(youtubeUrl);
         if (!videoId) {
             setYoutubeError('Invalid YouTube URL.');
             return;
@@ -311,11 +464,24 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
         }
     };
 
+    // --- UPDATED DELETE HANDLER ---
     const handleDeleteFromLibrary = async (id, e) => {
+        // Stop the click from bubbling up to the SceneButton (playing the video)
         e.stopPropagation();
-        const { error } = await supabase.from('user_videos').delete().eq('id', id);
-        if (!error) {
-            setSavedVideos(prev => prev.filter(v => v.id !== id));
+        e.preventDefault();
+
+        // Optimistic update: Remove it from UI immediately for "Instant" feel
+        const originalList = [...savedVideos];
+        setSavedVideos(prev => prev.filter(v => v.id !== id));
+
+        try {
+            const { error } = await supabase.from('user_videos').delete().eq('id', id);
+            if (error) throw error;
+        } catch (error) {
+            console.error("Delete failed:", error);
+            // Revert UI if the server request fails
+            setSavedVideos(originalList);
+            setYoutubeError('Failed to delete. Try again.');
         }
     };
 
@@ -326,15 +492,13 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
             ? STATIC_IMAGES
             : STATIC_IMAGES.filter(img => img.category === activeImageCategory);
 
-    // Combine Default Animated Scenes with Custom Scenes
+    // Merge Config Scenes + Custom Scenes
     const allAnimatedScenes = [
         ...ANIMATED_SCENES.map(s => ({ ...s, type: 'youtube-scene' })),
         ...customScenes.map(s => ({ ...s, type: 'video', thumbnail: null }))
     ];
 
     const displayedAnimatedScenes = isAnimatedExpanded ? allAnimatedScenes : allAnimatedScenes.slice(0, 4);
-
-    // Categories List with Custom at the end
     const categoriesList = [...STATIC_CATEGORIES, { id: 'custom', label: 'Custom' }];
 
     return (
@@ -360,6 +524,11 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                     {activeTab === 'scenes' && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             
+                            {/* TOP DISCLAIMER (Only render if preferences loaded and NOT docked) */}
+                            {preferencesLoaded && !dataDisclaimerAtBottom && (
+                                <HighDataDisclaimer isBottom={false} onDismiss={dismissDataDisclaimer} />
+                            )}
+
                             {/* 1. Animated Scenes Section */}
                             <div>
                                 <div className="flex items-center justify-between mb-4">
@@ -379,13 +548,15 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                         )}
                                     </Button>
                                 </div>
-                                
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     {displayedAnimatedScenes.map(scene => (
                                         <div key={scene.id} className="relative group">
                                             <SceneButton
                                                 scene={scene}
-                                                isActive={(scene.videoId && activeScene.videoId === scene.videoId) || (scene.url && activeScene.path === scene.url)}
+                                                isActive={
+                                                    (scene.videoId && activeScene.videoId === scene.videoId) || 
+                                                    (scene.url && activeScene.path === scene.url)
+                                                }
                                                 onClick={() => {
                                                     if (scene.type === 'youtube-scene') {
                                                         playScene({ type: 'youtube-scene', videoId: scene.videoId, path: null });
@@ -394,7 +565,6 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                     }
                                                 }}
                                             />
-                                            {/* Delete Button for Custom Scenes */}
                                             {scene.type === 'video' && (
                                                  <button 
                                                     onClick={(e) => handleDeleteCustom('video', scene.id)}
@@ -405,8 +575,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             )}
                                         </div>
                                     ))}
-
-                                    {/* IMPORT CARD (Tooltip on Hover) */}
+                                    {/* Import Card */}
                                     {isAnimatedExpanded && customScenes.length < MAX_CUSTOM_SCENES && (
                                         <TooltipProvider>
                                             <Tooltip>
@@ -419,7 +588,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                     </label>
                                                 </TooltipTrigger>
                                                 <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs">
-                                                    <p>Local videos are stored in your browser. Clearing history/cookies will remove them.</p>
+                                                    <p>Local videos are stored in your browser.</p>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
@@ -432,8 +601,6 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                 <h4 className="font-semibold text-gray-300 flex items-center gap-2 mb-4">
                                     <LucideImage size={18} className="text-blue-400" /> Static Backgrounds
                                 </h4>
-
-                                {/* Category Filters */}
                                 <div className="flex overflow-x-auto pb-4 gap-2 no-scrollbar mask-gradient">
                                     {categoriesList.map(cat => (
                                         <Button
@@ -452,10 +619,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                         </Button>
                                     ))}
                                 </div>
-
-                                {/* Static Images Grid */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {/* Custom Upload Card - Tooltip on Hover */}
                                     {activeImageCategory === 'custom' && customImages.length < MAX_CUSTOM_IMAGES && (
                                         <TooltipProvider>
                                             <Tooltip>
@@ -468,13 +632,11 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                     </label>
                                                 </TooltipTrigger>
                                                 <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs">
-                                                    <p>Local images are stored in your browser. Clearing history/cookies will remove them.</p>
+                                                    <p>Local images are stored in your browser.</p>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
                                     )}
-
-                                    {/* Render Images */}
                                     {(activeImageCategory === 'custom' ? customImages : filteredImages).map((img, idx) => (
                                         <div key={img.id || idx} className="relative group">
                                             <SceneButton
@@ -486,7 +648,6 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                 isActive={activeScene.path === (activeImageCategory === 'custom' ? img.url : img.src)}
                                                 onClick={() => playScene({ type: 'image', path: activeImageCategory === 'custom' ? img.url : img.src })}
                                             />
-                                            {/* Delete Button for Custom Images */}
                                             {activeImageCategory === 'custom' && (
                                                  <button 
                                                     onClick={(e) => handleDeleteCustom('image', img.id)}
@@ -499,22 +660,25 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                     ))}
                                 </div>
                             </div>
+
+                            {/* BOTTOM DISCLAIMER (Render if docked) */}
+                            {preferencesLoaded && dataDisclaimerAtBottom && (
+                                <HighDataDisclaimer isBottom={true} onDismiss={null} />
+                            )}
                         </div>
                     )}
 
-                    {/* --- TAB 2: YOUTUBE (Preserved) --- */}
+                    {/* --- TAB 2: YOUTUBE --- */}
                     {activeTab === 'youtube' && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                             {/* Pro Tip Banner */}
-                             <div className="bg-gradient-to-r from-red-900/30 to-orange-900/30 border border-red-500/20 rounded-xl p-4 flex items-start gap-3">
-                                <div className="p-2 bg-red-500/10 rounded-lg">
-                                    <MonitorPlay className="w-5 h-5 text-red-400" />
-                                </div>
-                                <div className="text-sm text-gray-300">
-                                    <h4 className="font-semibold text-white mb-1">Study Mode</h4>
-                                    <p className="opacity-90">Paste a lecture or tutorial link below. You can enable <strong>Video Controls</strong> to pause/rewind.</p>
-                                </div>
-                            </div>
+                             
+                             {/* TOP BANNERS */}
+                             {preferencesLoaded && !dataDisclaimerAtBottom && (
+                                <HighDataDisclaimer isBottom={false} onDismiss={dismissDataDisclaimer} />
+                             )}
+                             {preferencesLoaded && !studyTipAtBottom && (
+                                <StudyModeTip isBottom={false} onDismiss={dismissStudyTip} />
+                             )}
 
                             <div>
                                 <h4 className="font-semibold text-gray-300 mb-3">Curated Playlists</h4>
@@ -566,7 +730,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                 placeholder="Paste any YouTube URL..."
                                                 value={youtubeUrl}
                                                 onChange={(e) => { setYoutubeUrl(e.target.value); setYoutubeError(''); }}
-                                                className={cn("bg-gray-900/50 border-gray-600 pl-9", youtubeError && "border-red-500")}
+                                                className={cn("bg-gray-900/50 border-gray-600 pl-9", youtubeError && "border-red-500 focus-visible:ring-red-500")}
                                             />
                                             <Youtube className="absolute left-3 top-2.5 text-gray-500 h-4 w-4" />
                                         </div>
@@ -589,11 +753,18 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             </Tooltip>
                                         </TooltipProvider>
 
-                                        <Button onClick={() => handleYoutubePlay(youtubeUrl)} className="bg-red-600 hover:bg-red-700 text-white gap-2">
+                                        <Button 
+                                            onClick={() => handleYoutubePlay(youtubeUrl)} 
+                                            className="bg-red-600 hover:bg-red-700 text-white gap-2 font-semibold"
+                                        >
                                             <Play size={16} fill="currentColor" /> Load
                                         </Button>
                                     </div>
-                                    {youtubeError && <p className="text-xs text-red-400 px-1">{youtubeError}</p>}
+                                    {youtubeError && (
+                                        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-950/30 p-2 rounded-md border border-red-900/50 animate-in fade-in slide-in-from-top-1">
+                                            <AlertCircle size={14} /> {youtubeError}
+                                        </div>
+                                    )}
 
                                     {/* Saved Library Grid */}
                                     {savedVideos.length > 0 && (
@@ -607,11 +778,13 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                             isActive={youtube.id === vid.video_id}
                                                             onClick={() => playYoutube(vid.url, { isCustom: false })}
                                                         />
+                                                        {/* FIXED DELETE BUTTON (Z-Index 50) */}
                                                         <button 
                                                             onClick={(e) => handleDeleteFromLibrary(vid.id, e)}
-                                                            className="absolute top-1 right-1 p-1 bg-black/60 hover:bg-red-600/90 text-white rounded opacity-0 group-hover:opacity-100 transition-all"
+                                                            className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-red-600 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-50 cursor-pointer"
+                                                            title="Delete from Library"
                                                         >
-                                                            <Trash2 size={12} />
+                                                            <Trash2 size={14} />
                                                         </button>
                                                     </div>
                                                 ))}
@@ -652,10 +825,18 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                     )}
                                 </div>
                             </div>
+
+                            {/* BOTTOM BANNERS (Render if docked) */}
+                            {preferencesLoaded && studyTipAtBottom && (
+                                <StudyModeTip isBottom={true} onDismiss={null} />
+                            )}
+                            {preferencesLoaded && dataDisclaimerAtBottom && (
+                                <HighDataDisclaimer isBottom={true} onDismiss={null} />
+                            )}
                         </div>
                     )}
 
-                    {/* --- TAB 3: SOUNDSCAPES (Preserved) --- */}
+                    {/* --- TAB 3: SOUNDSCAPES --- */}
                     {activeTab === 'soundscapes' && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
@@ -718,70 +899,5 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                 </div>
             </DialogContent>
         </Dialog>
-    );
-}
-
-function SceneButton({ scene, isActive, onClick }) {
-    // Protection Handler
-    const preventTheft = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-    };
-
-    // Helper to render media content safely
-    const renderMedia = () => {
-        if (scene.type === 'video') {
-            return (
-                <video 
-                    src={scene.url} 
-                    className="object-cover w-full h-full select-none" 
-                    muted 
-                    loop 
-                    onMouseOver={e => e.target.play().catch(()=>{})} 
-                    onMouseOut={e => e.target.pause()}
-                    // PROTECTION
-                    onContextMenu={preventTheft}
-                    onDragStart={preventTheft}
-                    draggable={false}
-                />
-            );
-        }
-        return (
-            <Image 
-                src={scene.thumbnail || '/placeholder.jpg'} 
-                alt={scene.name || 'Scene'} 
-                fill 
-                sizes="(max-width: 768px) 33vw, 20vw" 
-                className="object-cover group-hover:scale-105 transition-transform duration-300 select-none"
-                // PROTECTION
-                onContextMenu={preventTheft}
-                onDragStart={preventTheft}
-                draggable={false}
-            />
-        );
-    };
-
-    return (
-        <button 
-            onClick={onClick} 
-            className={cn(
-                "rounded-lg overflow-hidden border-2 transition-all group relative aspect-[16/9] w-full select-none", 
-                isActive ? "border-yellow-400 ring-2 ring-yellow-400/50" : "border-transparent hover:border-gray-600 bg-black/40"
-            )}
-            onContextMenu={preventTheft} // Protects the button container too
-        >
-            {renderMedia()}
-            
-            {/* Transparent Overlay Shield */}
-            <div 
-                className="absolute inset-0 z-20" 
-                onContextMenu={preventTheft}
-            />
-
-            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-2 z-30 pointer-events-none">
-                <p className="text-xs font-medium text-center text-white truncate">{scene.name}</p>
-            </div>
-        </button>
     );
 }

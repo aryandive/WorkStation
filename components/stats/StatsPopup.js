@@ -23,7 +23,6 @@ import { format, subDays, eachDayOfInterval, startOfDay, endOfDay, isSameDay } f
 
 // --- SUB-COMPONENTS ---
 
-// 1. StatCard (No Changes)
 const StatCard = ({ icon, label, value, unit, subtext, colorClass = "text-white" }) => (
     <Card className="bg-gray-800/50 border-gray-700 hover:bg-gray-800/70 transition-colors">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -39,7 +38,6 @@ const StatCard = ({ icon, label, value, unit, subtext, colorClass = "text-white"
     </Card>
 );
 
-// 2. DailyTaskRing (No Changes)
 const DailyTaskRing = ({ done, total }) => {
     const percentage = total > 0 ? Math.min(100, (done / total) * 100) : 0;
     const radius = 50;
@@ -60,7 +58,6 @@ const DailyTaskRing = ({ done, total }) => {
     );
 };
 
-// 3. SimpleWeeklyTrendChart (No Changes)
 const tooltipStyle = { 
     background: "#1F2937", 
     border: '1px solid #374151', 
@@ -90,7 +87,6 @@ const SimpleWeeklyTrendChart = ({ data }) => {
     );
 };
 
-// 4. FocusHistoryChart (No Changes)
 const FocusHistoryChart = ({ data }) => {
     const [view, setView] = useState('weekly'); 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,7 +152,6 @@ const FocusHistoryChart = ({ data }) => {
     );
 };
 
-// 5. FocusByProjectChart (No Changes)
 const FocusByProjectChart = ({ data }) => {
     const COLORS = ['#38B2AC', '#FBBF24', '#60A5FA', '#F87171', '#A78BFA', '#F472B6'];
     
@@ -189,35 +184,27 @@ const FocusByProjectChart = ({ data }) => {
     )
 };
 
-// --- NEW: Calendar Heatmap Component ---
 const CalendarHeatmap = ({ data }) => {
-    // 1. Generate last 365 days
     const days = useMemo(() => {
         const today = new Date();
-        const startDate = subDays(today, 364); // 52 weeks * 7 roughly
+        const startDate = subDays(today, 364); 
         return eachDayOfInterval({ start: startDate, end: today });
     }, []);
 
-    // 2. Helper to get color intensity
     const getColor = (minutes) => {
-        if (!minutes || minutes === 0) return 'bg-gray-800/50 hover:bg-gray-800'; // Empty
-        if (minutes < 30) return 'bg-emerald-900/40 hover:bg-emerald-900/60';   // Light
-        if (minutes < 60) return 'bg-emerald-700/60 hover:bg-emerald-700/80';   // Medium
-        if (minutes < 120) return 'bg-emerald-500/80 hover:bg-emerald-500';     // High
-        return 'bg-emerald-400 hover:bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.4)]'; // Intense
+        if (!minutes || minutes === 0) return 'bg-gray-800/50 hover:bg-gray-800'; 
+        if (minutes < 30) return 'bg-emerald-900/40 hover:bg-emerald-900/60';   
+        if (minutes < 60) return 'bg-emerald-700/60 hover:bg-emerald-700/80';   
+        if (minutes < 120) return 'bg-emerald-500/80 hover:bg-emerald-500';     
+        return 'bg-emerald-400 hover:bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.4)]'; 
     };
 
-    // 3. Group by Weeks (for Grid Layout)
-    // We need an array of arrays. Each inner array is a week (Sun-Sat).
-    // Note: Simple grid-flow-col approach is easier with CSS Grid.
-    
     return (
         <div className="flex flex-col gap-2">
             <TooltipProvider>
                 <div className="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
                     <div className="grid grid-rows-7 grid-flow-col gap-1 w-max min-w-full" style={{ height: '140px' }}>
                         {days.map((day) => {
-                            // Exact Key Match Logic from useStats
                             const dateKey = startOfDay(day).toISOString();
                             const minutes = data[dateKey] || 0;
                             const isToday = isSameDay(day, new Date());
@@ -246,7 +233,6 @@ const CalendarHeatmap = ({ data }) => {
                 </div>
             </TooltipProvider>
             
-            {/* Legend */}
             <div className="flex items-center justify-end gap-2 text-xs text-gray-500 mt-1">
                 <span>Less</span>
                 <div className="flex gap-1">
@@ -266,9 +252,11 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
     const { stats, loading } = useStats();
     const { isPro } = useSubscription();
     const [activeTab, setActiveTab] = useState('dashboard');
+    // --- UPDATED: Toggle State ---
+    const [projectView, setProjectView] = useState('week'); 
+    
     const fileInputRef = useRef(null);
 
-    // --- Export/Import Logic (Unchanged) ---
     const handleDownloadBackup = () => {
         try {
             const backupData = {
@@ -389,10 +377,10 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                         {activeTab === 'dashboard' && (
                             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
                                 <div className="md:col-span-1 flex flex-col items-center justify-center space-y-4 bg-gray-800/20 rounded-xl p-4 border border-gray-800">
-                                    <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Daily Goal</h3>
-                                    <DailyTaskRing done={stats.tasksDoneToday} total={stats.totalTasksToday} />
+                                    <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Total Goal</h3>
+                                    <DailyTaskRing done={stats.tasksDoneAllTime} total={stats.totalTasksAllTime} />
                                     <div className="text-xs text-gray-500 text-center px-2">
-                                        {stats.tasksDoneToday === stats.totalTasksToday && stats.totalTasksToday > 0 
+                                        {stats.tasksDoneAllTime === stats.totalTasksAllTime && stats.totalTasksAllTime > 0 
                                             ? "🎉 All tasks completed!" 
                                             : "Keep pushing!"}
                                     </div>
@@ -402,7 +390,7 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                                     <div className="grid grid-cols-3 gap-4">
                                         <StatCard icon={<CheckCircle className="h-4 w-4 text-green-400" />} label="Tasks Done" value={stats.tasksDoneToday} unit="" />
                                         <StatCard icon={<Calendar className="h-4 w-4 text-purple-400" />} label="Streak" value={stats.daysAccessed} unit="days" />
-                                        <StatCard icon={<Clock className="h-4 w-4 text-blue-400" />} label="Total Focus" value={stats.totalFocusTimeFormatted} unit="" />
+                                        <StatCard icon={<Clock className="h-4 w-4 text-blue-400" />} label="Today's Focus" value={stats.todaysFocusFormatted} unit="" />
                                     </div>
                                     <Card className="bg-gray-800/20 border-gray-800">
                                         <CardHeader className="py-3 border-b border-gray-800/50">
@@ -420,20 +408,34 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
 
                         {activeTab === 'insights' && (
                             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                {/* Row 1: Project Distribution & Calendar Heatmap */}
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                     <Card className="bg-gray-800/20 border-gray-800">
                                         <CardHeader>
-                                            <CardTitle className="text-sm font-medium text-gray-400 flex items-center">
-                                                <PieChart className="mr-2 h-4 w-4" /> Project Distribution
+                                            <CardTitle className="text-sm font-medium text-gray-400 flex items-center justify-between">
+                                                <div className="flex items-center">
+                                                    <PieChart className="mr-2 h-4 w-4" /> Project Distribution
+                                                </div>
+                                                
+                                                {/* --- UPDATED: Toggle Buttons --- */}
+                                                <div className="flex bg-gray-800 rounded-md p-0.5 ml-auto">
+                                                    <button 
+                                                        onClick={() => setProjectView('today')}
+                                                        className={cn("px-2 py-0.5 text-[10px] rounded-sm transition-all", projectView === 'today' ? "bg-gray-700 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                                    >Today</button>
+                                                    <button 
+                                                        onClick={() => setProjectView('week')}
+                                                        className={cn("px-2 py-0.5 text-[10px] rounded-sm transition-all", projectView === 'week' ? "bg-gray-700 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                                    >This Week</button>
+                                                </div>
+
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            <FocusByProjectChart data={stats.focusByProject} />
+                                            {/* --- UPDATED: Pass data based on toggle --- */}
+                                            <FocusByProjectChart data={stats.focusByProject[projectView]} />
                                         </CardContent>
                                     </Card>
 
-                                    {/* --- UPDATED: Replaced Placeholder with Real Calendar Heatmap --- */}
                                     <Card className="bg-gray-800/20 border-gray-800 flex flex-col">
                                         <CardHeader>
                                             <CardTitle className="text-sm font-medium text-gray-400 flex items-center justify-between">
@@ -449,15 +451,28 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                                     </Card>
                                 </div>
 
-                                {/* Row 2: KPI Cards */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    <StatCard icon={<Zap className="h-4 w-4 text-yellow-400" />} label="Today's Focus" value={stats.todaysFocusMinutes} unit="m" colorClass="text-yellow-400"/>
-                                    <StatCard icon={<Trophy className="h-4 w-4 text-orange-400" />} label="Best Session" value={stats.bestFocusMinutes} unit="m" subtext="Personal Record" colorClass="text-orange-400"/>
+                                    {/* --- UPDATED: Replaced Today's Focus with Total Days Accessed --- */}
+                                    <StatCard 
+                                        icon={<Calendar className="h-4 w-4 text-yellow-400" />} 
+                                        label="Total Days Accessed" 
+                                        value={stats.daysAccessed} 
+                                        unit="days" 
+                                        colorClass="text-yellow-400"
+                                    />
+                                    
+                                    <StatCard 
+                                        icon={<Trophy className="h-4 w-4 text-orange-400" />} 
+                                        label="Best Day Record" 
+                                        value={stats.bestFocusMinutes} 
+                                        unit="m" 
+                                        subtext={stats.bestDayDate || "No data yet"} 
+                                        colorClass="text-orange-400"
+                                    />
                                     <StatCard icon={<Clock className="h-4 w-4 text-blue-400" />} label="All Time" value={Math.floor(stats.allTimeFocusMinutes / 60)} unit="h" subtext={`${stats.allTimeFocusMinutes % 60}m remaining`}/>
                                     <StatCard icon={<TrendingUp className="h-4 w-4 text-green-400" />} label="Growth" value={`${stats.weeklyGrowthPercentage > 0 ? '+' : ''}${stats.weeklyGrowthPercentage}`} unit="%" colorClass={stats.weeklyGrowthPercentage >= 0 ? "text-green-400" : "text-red-400"} subtext="vs Last Week"/>
                                 </div>
 
-                                {/* Row 3: History Chart */}
                                 <Card className="bg-gray-800/20 border-gray-800">
                                     <CardHeader className="py-3 border-b border-gray-800/50">
                                         <CardTitle className="text-sm font-medium text-gray-400 flex items-center">
