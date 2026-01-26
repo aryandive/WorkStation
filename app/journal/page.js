@@ -265,7 +265,7 @@ const JournalEditor = ({
                             </div>
                         )}
                     </div>
-                </div>  
+                </div>
 
                 {isSavingDisabled && (
                     <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg text-center animate-in fade-in slide-in-from-top-2">
@@ -358,6 +358,7 @@ export default function JournalPage() {
     const { isPro, loading: subLoading } = useSubscription();
     const router = useRouter();
     const supabase = createClient();
+    const [displayName, setDisplayName] = useState(''); // NEW STATE
 
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [entry, setEntry] = useState({ id: null, date: null, title: '', content: '' });
@@ -453,6 +454,19 @@ export default function JournalPage() {
     }, [supabase, user, isPro]);
 
     // --- Effects ---
+
+    useEffect(() => {
+        if (user) {
+            const fetchProfileName = async () => {
+                const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).single();
+                if (data?.display_name) {
+                    setDisplayName(data.display_name);
+                }
+            };
+            fetchProfileName();
+        }
+    }, [user, supabase]);
+
     useEffect(() => {
         const hour = new Date().getHours();
         setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
@@ -609,7 +623,10 @@ export default function JournalPage() {
                     <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-900/40 to-transparent z-10"></div>
                     <div className="absolute inset-0 bg-black/20 z-10"></div>
 
-                    <Greeting greeting={greeting} username={user?.email?.split('@')[0] || 'Explorer'} />
+                    <Greeting
+                        greeting={greeting}
+                        username={displayName || user?.email?.split('@')[0] || 'Explorer'}
+                    />
                 </header>
 
                 {/* Mobile: Toggle Sidebar Button */}
