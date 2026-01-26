@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 // --- Helper: Countdown Timer Component ---
 const CountdownTimer = () => {
     const calculateTimeLeft = () => {
-        const difference = +new Date("2025-10-12T00:00:00") - +new Date();
+        const difference = +new Date("2026-04-13T00:00:00") - +new Date();
         let timeLeft = {};
 
         if (difference > 0) {
@@ -59,7 +59,7 @@ export default function LandingPage() {
                         Your Personal Focus Environment.
                     </h1>
                     <p className="text-lg md:text-xl text-[#A0AEC0] max-w-2xl mx-auto mb-8">
-                        The full v1.0.0 launches on **October 12th**. Join as an early bird and lock in a lifetime discount.
+                        The v2.0.0 launches on **April 13th**. Join as an early bird and lock in a lifetime discount*.
                     </p>
                     <div className="mb-8">
                         <CountdownTimer />
@@ -67,7 +67,7 @@ export default function LandingPage() {
                     <Button asChild size="lg" className="bg-yellow-400 text-gray-900 hover:bg-yellow-300 text-lg font-bold py-7 px-8 rounded-lg shadow-lg">
                         <Link href="/pricing">Claim Your 50% Early Bird Discount</Link>
                     </Button>
-                    <p className="text-xs text-[#A0AEC0] mt-4">Currently in pre-release (v0.0.0)</p>
+                    <p className="text-xs text-[#A0AEC0] mt-4">Currently in release (v1.0.0)</p>
                 </div>
             </section>
 

@@ -153,9 +153,19 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                         </span>
                         <div className="flex gap-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
                             <TimerControls 
-                                isRunning={isRunning} startTimer={startTimer} pauseTimer={pauseTimer} 
-                                resetTimer={resetTimer} skipMode={skipMode} isMinimized={true} 
-                                maximize={() => setIsMinimized(false)} onRecenter={() => setPosition({x:0, y:0})}
+                                isRunning={isRunning} 
+                                startTimer={startTimer} 
+                                pauseTimer={pauseTimer} 
+                                resetTimer={resetTimer} 
+                                skipMode={skipMode} 
+                                isMinimized={true} 
+                                maximize={() => setIsMinimized(false)} 
+                                // FIX: Only recenter if we are NOT dragging (checked via ref)
+                                onRecenter={() => {
+                                    if (!isDraggingRef.current) {
+                                        setPosition({ x: 0, y: 0 });
+                                    }
+                                }}
                             />
                         </div>
                     </div>
