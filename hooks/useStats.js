@@ -5,9 +5,9 @@ import { createClient } from '@/utils/supabase/client';
 import { useSubscription } from '@/context/SubscriptionContext';
 import { useAuth } from '@/context/AuthContext';
 import eventBus from '@/lib/eventBus';
-import { 
-    startOfDay, isSameDay, subDays, parseISO, subMonths, 
-    format, isSameMonth 
+import {
+    startOfDay, isSameDay, subDays, parseISO, subMonths,
+    format, isSameMonth
 } from 'date-fns';
 
 export default function useStats() {
@@ -16,7 +16,7 @@ export default function useStats() {
         totalTasksToday: 0,
         tasksDoneAllTime: 0,
         totalTasksAllTime: 0,
-        
+
         daysAccessed: 0,
         totalFocusTimeFormatted: "0h 0m",
         todaysFocusFormatted: "0h 0m",
@@ -24,13 +24,13 @@ export default function useStats() {
         weeklyFocusTrend: [],
         chartData: { weekly: [], monthly: [], yearly: [] },
         productivityHeatmap: {},
-        
+
         // --- UPDATED: Split Project Data ---
         focusByProject: { today: [], week: [] },
-        
+
         todaysFocusMinutes: 0,
         bestFocusMinutes: 0,
-        bestDayDate: null, 
+        bestDayDate: null,
         allTimeFocusMinutes: 0,
         weeklyGrowthPercentage: 0
     }), []);
@@ -54,7 +54,7 @@ export default function useStats() {
 
         let totalTasksToday = 0;
         let tasksDoneToday = 0;
-        
+
         tasks.forEach(t => {
             const created = t.created_at ? parseISO(t.created_at) : new Date();
             const updated = t.updated_at ? parseISO(t.updated_at) : created;
@@ -65,14 +65,14 @@ export default function useStats() {
         });
 
         // B. Process Sessions
-        const dailyMap = new Map();   
-        const monthlyMap = new Map(); 
-        
+        const dailyMap = new Map();
+        const monthlyMap = new Map();
+
         // --- UPDATED: Separate Maps for Projects ---
         const projectMapToday = new Map();
         const projectMapWeek = new Map();
-        
-        const heatMap = {};           
+
+        const heatMap = {};
 
         let totalMinutesAllTime = 0;
         let todayMinutes = 0;
@@ -99,14 +99,22 @@ export default function useStats() {
 
             // Project Logic
             let projectName = 'Unlinked';
-            if (s.task_id) {
+
+            // STRATEGY:
+            // 1. Try to get Project ID directly from the session (The Fix)
+            // 2. Fallback: If session.project_id is missing (old data), try to find it via task_id
+            let effectiveProjectId = s.project_id;
+
+            if (!effectiveProjectId && s.task_id) {
                 const task = tasks.find(t => t.id === s.task_id);
-                if (task && task.project_id) {
-                    const project = projects.find(p => p.id === task.project_id);
-                    if (project) projectName = project.name;
-                }
+                if (task) effectiveProjectId = task.project_id;
             }
 
+            // Now lookup the name using the found ID
+            if (effectiveProjectId) {
+                const project = projects.find(p => p.id === effectiveProjectId);
+                if (project) projectName = project.name;
+            }
             // Populate Today Map
             if (isSameDay(sDate, today)) {
                 projectMapToday.set(projectName, (projectMapToday.get(projectName) || 0) + duration);
@@ -136,7 +144,7 @@ export default function useStats() {
                 const key = format(targetDate, dateFormat);
                 const mins = dailyMap.get(key) || 0;
                 data.push({
-                    name: format(targetDate, labelFormat), 
+                    name: format(targetDate, labelFormat),
                     minutes: mins,
                     fullDate: format(targetDate, 'd MMM yyyy'),
                 });
@@ -192,7 +200,7 @@ export default function useStats() {
             focusByProject, // Returns Object { today: [], week: [] }
             todaysFocusMinutes: todayMinutes,
             bestFocusMinutes: maxDailyMinutes,
-            bestDayDate: maxDailyDate, 
+            bestDayDate: maxDailyDate,
             allTimeFocusMinutes: totalMinutesAllTime,
             weeklyGrowthPercentage: growth
         };

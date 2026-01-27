@@ -24,13 +24,14 @@ export function useSessionLogger() {
     const { isPro } = useSubscription();
     const supabase = createClient();
 
-    const saveSession = useCallback(async ({ duration, taskId }) => {
+    const saveSession = useCallback(async ({ duration, taskId, projectId }) => {
         if (!duration || duration <= 0) return;
 
         const sessionData = {
             id: crypto.randomUUID(),
             user_id: user?.id || 'guest',
             task_id: taskId || null,
+            project_id: projectId || null,
             duration_minutes: duration,
             created_at: new Date().toISOString(),
             synced: !!(isPro && user) // simplified boolean cast
