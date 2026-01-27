@@ -34,7 +34,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     const [linkedTask, setLinkedTask] = useState(null);
     const [isMinimized, setIsMinimized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    
+
     // Draggable State
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const isDraggingRef = useRef(false);
@@ -61,7 +61,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     }, [onTaskTimeUpdateRef, saveSession]);
 
     const {
-        isStoreLoaded, // <--- NEW PROP
+        isStoreLoaded,
         timeLeft, isRunning, mode, progress, settings,
         startTimer, pauseTimer, resetTimer, skipMode, updateSettings, setMode,
     } = usePomodoroTimer({ onSessionComplete: handleSessionComplete });
@@ -95,17 +95,37 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         };
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, isRunning, isMinimized, isSettingsOpen, startTimer, pauseTimer, skipMode, resetTimer, playSound]);
 
-    // Data Fetching
+    // Data Fetching (UPDATED WITH SOFT DELETE FILTER)
     useEffect(() => {
         if (isOpen) {
             const fetchTasks = async () => {
                 const { data: { user } } = await supabase.auth.getUser();
                 if (user) {
-                    const { data } = await supabase.from('todos').select('id, task').eq('user_id', user.id).eq('is_complete', false).is('parent_task_id', null);
-                    setTasks(data || []);
+                    // 1. Fetch Active Project IDs (Filter out deleted)
+                    const { data: activeProjects } = await supabase
+                        .from('projects')
+                        .select('id')
+                        .is('deleted_at', null);
+
+                    const activeProjectIds = new Set(activeProjects?.map(p => p.id) || []);
+
+                    // 2. Fetch Tasks (include project_id)
+                    const { data: tasksData } = await supabase
+                        .from('todos')
+                        .select('id, task, project_id')
+                        .eq('user_id', user.id)
+                        .eq('is_complete', false)
+                        .is('parent_task_id', null);
+
+                    // 3. Filter tasks: Show if project is active OR if task has no project
+                    const validTasks = (tasksData || []).filter(t =>
+                        !t.project_id || activeProjectIds.has(t.project_id)
+                    );
+
+                    setTasks(validTasks);
                 } else {
                     const local = JSON.parse(localStorage.getItem('ws_tasks')) || [];
                     setTasks(local.filter(t => !t.is_complete && !t.parent_task_id));
@@ -117,8 +137,6 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
 
     if (!isOpen) return null;
 
-    // --- FLASH PREVENTION FIX ---
-    // Don't render content until state is fully restored from localStorage
     if (!isStoreLoaded) {
         return (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in backdrop-blur-sm">
@@ -153,15 +171,14 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                             {minutes}:{seconds}
                         </span>
                         <div className="flex gap-4 mt-4 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-                            <TimerControls 
-                                isRunning={isRunning} 
-                                startTimer={startTimer} 
-                                pauseTimer={pauseTimer} 
-                                resetTimer={resetTimer} 
-                                skipMode={skipMode} 
-                                isMinimized={true} 
-                                maximize={() => setIsMinimized(false)} 
-                                // FIX: Only recenter if we are NOT dragging (checked via ref)
+                            <TimerControls
+                                isRunning={isRunning}
+                                startTimer={startTimer}
+                                pauseTimer={pauseTimer}
+                                resetTimer={resetTimer}
+                                skipMode={skipMode}
+                                isMinimized={true}
+                                maximize={() => setIsMinimized(false)}
                                 onRecenter={() => {
                                     if (!isDraggingRef.current) {
                                         setPosition({ x: 0, y: 0 });
@@ -188,10 +205,10 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
                 <CardContent className="flex flex-col items-center p-6 pt-2">
                     <div className="flex gap-2 bg-gray-800/50 p-1 rounded-lg mb-4">
                         {['work', 'break', 'longBreak'].map(m => (
-                            <Button 
+                            <Button
                                 key={m}
-                                onClick={() => setMode(m)} 
-                                variant="ghost" 
+                                onClick={() => setMode(m)}
+                                variant="ghost"
                                 className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === m && colorMap[m].button)}
                             >
                                 {m === 'work' ? 'Focus' : m === 'break' ? 'Short Break' : 'Long Break'}

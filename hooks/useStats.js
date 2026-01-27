@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import eventBus from '@/lib/eventBus';
 import {
     startOfDay, isSameDay, subDays, parseISO, subMonths,
-    format, isSameMonth
+    format, addMinutes, differenceInMinutes, startOfMonth
 } from 'date-fns';
 
 export default function useStats() {
@@ -25,7 +25,6 @@ export default function useStats() {
         chartData: { weekly: [], monthly: [], yearly: [] },
         productivityHeatmap: {},
 
-        // --- UPDATED: Split Project Data ---
         focusByProject: { today: [], week: [] },
 
         todaysFocusMinutes: 0,
@@ -64,27 +63,23 @@ export default function useStats() {
             }
         });
 
-        // B. Process Sessions
+        // B. Process Sessions (With Midnight Split Logic)
         const dailyMap = new Map();
         const monthlyMap = new Map();
-
-        // --- UPDATED: Separate Maps for Projects ---
         const projectMapToday = new Map();
         const projectMapWeek = new Map();
-
         const heatMap = {};
 
         let totalMinutesAllTime = 0;
         let todayMinutes = 0;
         const uniqueDays = new Set();
 
-        sessions.forEach(s => {
-            const duration = s.duration_minutes || 0;
+        // Helper to process a specific chunk of time
+        const processFragment = (dateObj, duration, projectId, taskId) => {
             if (duration <= 0) return;
 
-            const sDate = parseISO(s.created_at);
-            const dateKey = format(sDate, 'yyyy-MM-dd');
-            const monthKey = format(sDate, 'yyyy-MM');
+            const dateKey = format(dateObj, 'yyyy-MM-dd');
+            const monthKey = format(dateObj, 'yyyy-MM');
 
             totalMinutesAllTime += duration;
             uniqueDays.add(dateKey);
@@ -94,35 +89,65 @@ export default function useStats() {
             dailyMap.set(dateKey, (dailyMap.get(dateKey) || 0) + duration);
             monthlyMap.set(monthKey, (monthlyMap.get(monthKey) || 0) + duration);
 
-            const heatKey = startOfDay(sDate).toISOString();
+            const heatKey = startOfDay(dateObj).toISOString();
             heatMap[heatKey] = (heatMap[heatKey] || 0) + duration;
 
-            // Project Logic
+            // --- Project Logic ---
             let projectName = 'Unlinked';
+            let effectiveProjectId = projectId;
 
-            // STRATEGY:
-            // 1. Try to get Project ID directly from the session (The Fix)
-            // 2. Fallback: If session.project_id is missing (old data), try to find it via task_id
-            let effectiveProjectId = s.project_id;
-
-            if (!effectiveProjectId && s.task_id) {
-                const task = tasks.find(t => t.id === s.task_id);
+            // Fallback: Try to find project via task_id if not on session
+            if (!effectiveProjectId && taskId) {
+                const task = tasks.find(t => t.id === taskId);
                 if (task) effectiveProjectId = task.project_id;
             }
 
-            // Now lookup the name using the found ID
+            // Lookup Name
             if (effectiveProjectId) {
                 const project = projects.find(p => p.id === effectiveProjectId);
                 if (project) projectName = project.name;
             }
+
             // Populate Today Map
-            if (isSameDay(sDate, today)) {
+            if (isSameDay(dateObj, today)) {
                 projectMapToday.set(projectName, (projectMapToday.get(projectName) || 0) + duration);
             }
 
             // Populate Week Map (Rolling 7 Days)
-            if (sDate >= weekStart) {
+            if (dateObj >= weekStart) {
                 projectMapWeek.set(projectName, (projectMapWeek.get(projectName) || 0) + duration);
+            }
+        };
+
+        // --- Main Loop ---
+        sessions.forEach(s => {
+            const rawDuration = s.duration_minutes || 0;
+            if (rawDuration <= 0) return;
+
+            const startDate = parseISO(s.created_at);
+            const endDate = addMinutes(startDate, rawDuration);
+            
+            const startDayStr = format(startDate, 'yyyy-MM-dd');
+            const endDayStr = format(endDate, 'yyyy-MM-dd');
+
+            if (startDayStr === endDayStr) {
+                // SCENARIO A: Simple (Same Day)
+                processFragment(startDate, rawDuration, s.project_id, s.task_id);
+            } else {
+                // SCENARIO B: Crosses Midnight (Split it)
+                const midnight = startOfDay(endDate); // 00:00 of the next day
+                
+                // Part 1: Yesterday
+                const firstPart = differenceInMinutes(midnight, startDate);
+                if (firstPart > 0) {
+                    processFragment(startDate, firstPart, s.project_id, s.task_id);
+                }
+
+                // Part 2: Today
+                const secondPart = rawDuration - firstPart;
+                if (secondPart > 0) {
+                    processFragment(midnight, secondPart, s.project_id, s.task_id);
+                }
             }
         });
 
@@ -183,7 +208,6 @@ export default function useStats() {
             return `${h}h ${m}m`;
         };
 
-        // --- UPDATED: Return separate arrays ---
         const focusByProject = {
             today: Array.from(projectMapToday.entries()).map(([name, minutes]) => ({ name, minutes })),
             week: Array.from(projectMapWeek.entries()).map(([name, minutes]) => ({ name, minutes }))
@@ -197,7 +221,7 @@ export default function useStats() {
             weeklyFocusTrend: weeklyData,
             chartData: { weekly: weeklyData, monthly: monthlyData, yearly: yearlyData },
             productivityHeatmap: heatMap,
-            focusByProject, // Returns Object { today: [], week: [] }
+            focusByProject,
             todaysFocusMinutes: todayMinutes,
             bestFocusMinutes: maxDailyMinutes,
             bestDayDate: maxDailyDate,
@@ -231,9 +255,12 @@ export default function useStats() {
         if (!stats.daysAccessed) setIsLoadingStats(true);
         if (isPro && user) {
             try {
-                const { data: sessions } = await supabase.from('focus_sessions').select('created_at, duration_minutes, task_id').gte('created_at', subDays(new Date(), 365).toISOString());
+                // Fetching Project ID directly on sessions now (Fixes "Moved Task" bug)
+                const { data: sessions } = await supabase.from('focus_sessions').select('created_at, duration_minutes, task_id, project_id').gte('created_at', subDays(new Date(), 365).toISOString());
                 const { data: tasks } = await supabase.from('todos').select('id, created_at, updated_at, is_complete, project_id');
-                const { data: projects } = await supabase.from('projects').select('id, name');
+                // Fetch ALL projects (including soft-deleted) to resolve names correctly
+                const { data: projects } = await supabase.from('projects').select('id, name'); 
+                
                 if (sessions) setStats(processStatsData(sessions, tasks || [], projects || []));
             } catch (error) { console.error("Error fetching cloud stats:", error); }
         }
