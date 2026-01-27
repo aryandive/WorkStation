@@ -86,18 +86,19 @@ export default function MasterPlayer() {
             className="fixed inset-0 w-full h-full z-0 bg-black select-none"
             onContextMenu={protectMedia} 
         >
-            {/* --- LAYER 1: THE POSTER (Visual Anchor) --- */}
-            {/* This layer is ALWAYS present for images. 
-                For videos, it stays visible until the video is ready (Poster Swap). */}
-            {(activeScene.type === 'image' || activeScene.type === 'youtube-scene' || activeScene.type === 'video') && (
+{/* --- LAYER 1: THE POSTER (Visual Anchor) --- */}
+{(activeScene.type === 'image' || activeScene.type === 'youtube-scene' || activeScene.type === 'video') && (
                 <div 
                     className={`absolute inset-0 z-10 transition-opacity duration-1000 ease-in-out pointer-events-none ${
-                        // Logic: If it's a static image, always show (opacity 100).
-                        // If it's a video/youtube, fade out (opacity 0) ONLY when video is ready.
+                        // Logic: If it's a static image, always show.
+                        // If video, fade out only when video is ready.
                         activeScene.type === 'image' ? 'opacity-100' : (isVideoReady ? 'opacity-0' : 'opacity-100')
                     }`}
+                    // SAFETY LAYER 1: Dark background if image fails
+                    style={{ backgroundColor: '#0f0f0f' }} 
                 >
                      <Image
+                        // SAFETY LAYER 2: Try the path, fallback to local placeholder if empty
                         src={activeScene.thumbnail || activeScene.path || '/placeholder.jpg'}
                         alt="Background Ambience"
                         fill
@@ -106,6 +107,11 @@ export default function MasterPlayer() {
                         sizes="100vw"
                         className="object-cover"
                         draggable={false}
+                        // SAFETY LAYER 3: If Supabase load fails, force switch to local fallback
+                        onError={(e) => {
+                            e.target.src = '/placeholder.jpg'; // Ensure you have a public/placeholder.jpg
+                            e.target.srcset = '/placeholder.jpg';
+                        }}
                     />
                     {/* Dark overlay for text readability */}
                     <div className="absolute inset-0 bg-black/20" />

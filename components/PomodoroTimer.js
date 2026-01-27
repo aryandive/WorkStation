@@ -51,7 +51,8 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         if (sessionWasWork && duration > 0) {
             saveSession({
                 duration,
-                taskId: linkedTaskRef.current ? linkedTaskRef.current.id : null
+                taskId: linkedTaskRef.current ? linkedTaskRef.current.id : null,
+                projectId: linkedTaskRef.current ? linkedTaskRef.current.project_id : null
             });
             if (linkedTaskRef.current && onTaskTimeUpdateRef?.current) {
                 onTaskTimeUpdateRef.current(linkedTaskRef.current.id, 1);
