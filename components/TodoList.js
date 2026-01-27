@@ -34,13 +34,12 @@ import {
     Target,
     CheckCircle,
     Layers,
-    ChevronRight, // ADDED
-    ChevronDown   // ADDED
+    ChevronRight,
+    ChevronDown
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 
-// Main TodoList Component
 export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
     const [projects, setProjects] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -74,7 +73,13 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
     const fetchData = useCallback(async (currentUser) => {
         setLoading(true);
         if (currentUser) {
-            const { data: projectsData, error: projError } = await supabase.from('projects').select('*').eq('user_id', currentUser.id);
+            // FIX 1: Filter out soft-deleted projects
+            const { data: projectsData, error: projError } = await supabase
+                .from('projects')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .is('deleted_at', null);
+
             if (projError) console.error("Error fetching projects:", projError);
 
             const { data: tasksData, error: taskError } = await supabase.from('todos').select('*').eq('user_id', currentUser.id);
@@ -108,16 +113,20 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
             playCompletionSound();
         }
 
+        // Optimistic UI Update
         setTasks(currentTasks => currentTasks.map(t => t.id === taskId ? updatedTask : t));
         eventBus.dispatch('tasksUpdated');
 
         if (user) {
+            // FIX 2: Restored correct Task Update logic (removed the Project Delete code from here)
             const { error } = await supabase.from('todos').update(updates).eq('id', taskId);
+            
             if (error) {
                 console.error("Error updating task:", error);
-                setTasks(originalTasks);
+                setTasks(originalTasks); // Revert on error
                 eventBus.dispatch('tasksUpdated');
             } else {
+                // Auto-Journaling Logic
                 if (updates.is_complete && !taskToUpdate.is_complete && isAutoJournalingEnabled) {
                     const appendToJournal = async () => {
                         const todayStart = new Date();
@@ -212,7 +221,12 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
             return;
         }
         if (user) {
-            const { error } = await supabase.from('projects').delete().eq('id', projectId);
+            // FIX 3: Soft Delete Logic placed correctly here
+            const { error } = await supabase
+                .from('projects')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', projectId);
+                
             if (error) { console.error('Error deleting project:', error); }
         }
         const remainingProjects = projects.filter(p => p.id !== projectId);

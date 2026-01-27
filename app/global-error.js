@@ -2,12 +2,17 @@
 
 import { useEffect } from 'react';
 import { AlertTriangle, RefreshCcw } from 'lucide-react';
-import './globals.css'; // Ensure styling is available
+import './globals.css';
 
-export default function GlobalError({ error, reset }) {
+export default function GlobalError({ error }) { // removed 'reset' prop to avoid confusion
     useEffect(() => {
         console.error('💥 GLOBAL APPLICATION CRASH:', error);
     }, [error]);
+
+    const handleReload = () => {
+        // Force a hard reload from the server
+        window.location.reload();
+    };
 
     return (
         <html lang="en">
@@ -27,7 +32,7 @@ export default function GlobalError({ error, reset }) {
 
                     <div className="flex justify-center">
                         <button
-                            onClick={() => reset()}
+                            onClick={handleReload}
                             className="flex items-center gap-2 px-6 py-3 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors"
                         >
                             <RefreshCcw className="w-4 h-4" />
@@ -35,7 +40,6 @@ export default function GlobalError({ error, reset }) {
                         </button>
                     </div>
                     
-                    {/* Minimal Footer */}
                     <p className="text-xs text-gray-600 mt-8">
                         Error Code: GLOBAL_LAYOUT_FAILURE
                     </p>
