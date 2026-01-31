@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { saveLocalJournal, getLocalJournals } from '@/lib/localJournal';
@@ -8,7 +8,7 @@ import eventBus from '@/lib/eventBus';
 import {
     ChevronLeft, ChevronRight, RefreshCw, Bold, Italic, List, Heading1, Heading2, Search,
     Calendar as CalendarIcon, Type as ParagraphIcon, Bot, Lock, Edit, Zap, User, Star, Crown,
-    LogIn, Save, Loader2, PanelTopClose, PanelTopOpen, ArrowLeft, ArrowRight, Hourglass, History
+    LogIn, Save, Loader2, PanelTopClose, PanelTopOpen, ArrowLeft, ArrowRight, Hourglass, History, AlertTriangle, Home
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
@@ -19,11 +19,18 @@ import { Label } from '@/components/ui/label';
 import JournalEntriesModal from '@/components/journal/JournalEntriesModal';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'; // Ensure these are imported
 
-// --- Constants (Defined outside to prevent re-renders) ---
+// --- Constants ---
 const HIGH_PERFORMANCE_PROMPTS = ["You had a great focus day! What was your secret?", "Biggest win today?", "How to carry this momentum to tomorrow?"];
 const LOW_PERFORMANCE_PROMPTS = ["What blocked you today?", "Biggest distraction?", "One small change for tomorrow?"];
 const GENERAL_PROMPTS = ["What are you grateful for?", "One thing you learned?", "Interesting problem solved?"];
+
+/** Returns true if the entry has non-empty content (excludes ghost/empty entries). */
+function hasRealContent(entry) {
+    if (!entry || typeof entry.content !== 'string') return false;
+    return entry.content.replace(/<[^>]*>/g, '').trim() !== '';
+}
 
 // --- Sub-Components ---
 
@@ -123,7 +130,7 @@ const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
             const date = new Date(year, month, i);
             const dateKey = `${year}-${month + 1}-${i}`;
             const entryForDay = allEntries[dateKey];
-            const hasEntry = entryForDay && entryForDay.content && entryForDay.content.replace(/<[^>]*>/g, '').trim() !== '';
+            const hasEntry = !!entryForDay; 
 
             const isSelected = date.toDateString() === selectedDate.toDateString();
             const isToday = date.toDateString() === new Date().toDateString();
@@ -180,89 +187,147 @@ const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
     );
 };
 
-const JournalEditor = ({
+const JournalEditor = forwardRef(function JournalEditor({
     entry, onEntryChange, dailyStats, isPastDate, isFutureDate, isEditMode, setIsEditMode,
-    isSavingDisabled, onEntriesClick, saveStatus, onNavigate
-}) => {
+    isSavingDisabled, onEntriesClick, saveStatus, onNavigate, isContentLoading
+}, ref) {
     const editorRef = useRef(null);
+    const [localTitle, setLocalTitle] = useState(entry.title || '');
+    const [activeFormats, setActiveFormats] = useState({
+        bold: false, italic: false, list: false, h1: false, h2: false, p: false
+    });
+    const saveTimeoutRef = useRef(null);
+    const latestForFlushRef = useRef({ title: entry.title || '', content: entry.content || '' });
 
-    // Lock logic: Locked if it's (Past OR Future) AND not in edit mode.
-    // This ensures Time Capsules are locked by default until "Opened".
     const isLocked = ((isPastDate || isFutureDate) && !isEditMode);
-
     const isEmpty = !entry.content || entry.content.replace(/<[^>]*>/g, '').trim() === '';
 
-    useEffect(() => {
-        if (editorRef.current && editorRef.current.innerHTML !== entry.content) {
-            editorRef.current.innerHTML = entry.content;
-        }
-    }, [entry.id, entry.content]);
+    const checkFormats = () => {
+        if (!document) return;
+        const getVal = (cmd) => document.queryCommandState(cmd);
+        const getBlock = () => document.queryCommandValue('formatBlock');
+        setActiveFormats({
+            bold: getVal('bold'),
+            italic: getVal('italic'),
+            list: getVal('insertUnorderedList'),
+            h1: getBlock() === 'h1',
+            h2: getBlock() === 'h2',
+            p: getBlock() === 'p' || getBlock() === 'div'
+        });
+    };
 
-    const handleContentChange = (e) => {
-        onEntryChange({ ...entry, content: e.currentTarget.innerHTML });
+    const handleSelectionChange = () => { checkFormats(); };
+
+    useEffect(() => {
+        setLocalTitle(entry.title || '');
+        if (editorRef.current) {
+            editorRef.current.innerHTML = entry.content || '';
+        }
+        setActiveFormats({ bold: false, italic: false, list: false, h1: false, h2: false, p: false });
+        // Intentionally only when date changes so we don't reset editor on every content/title update
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [entry.date]);
+
+    useEffect(() => {
+        if (!isContentLoading && editorRef.current && entry.content) {
+            if (editorRef.current.innerHTML.trim() === '') {
+                editorRef.current.innerHTML = entry.content;
+            }
+        }
+    }, [isContentLoading, entry.content]);
+
+    const triggerSave = useCallback((newTitle, newContent) => {
+        latestForFlushRef.current = { title: newTitle, content: newContent };
+        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = setTimeout(() => {
+            onEntryChange({ ...entry, title: newTitle, content: newContent });
+        }, 500);
+    }, [entry, onEntryChange]);
+
+    const handleContentInput = (e) => {
+        const content = e.currentTarget.innerHTML;
+        latestForFlushRef.current = { ...latestForFlushRef.current, content };
+        triggerSave(localTitle, content);
     };
+
     const handleTitleChange = (e) => {
-        onEntryChange({ ...entry, title: e.target.value });
+        const title = e.target.value;
+        setLocalTitle(title);
+        latestForFlushRef.current = { ...latestForFlushRef.current, title };
+        const content = editorRef.current ? editorRef.current.innerHTML : '';
+        latestForFlushRef.current = { ...latestForFlushRef.current, content };
+        triggerSave(title, content);
     };
+
+    // Expose flush so parent can save current content before changing date
+    useImperativeHandle(ref, () => ({
+        flushSave: () => {
+            if (saveTimeoutRef.current) {
+                clearTimeout(saveTimeoutRef.current);
+                saveTimeoutRef.current = null;
+            }
+            const title = latestForFlushRef.current.title;
+            const content = editorRef.current?.innerHTML ?? latestForFlushRef.current.content;
+            if (title !== undefined || content !== undefined) {
+                onEntryChange({ ...entry, title, content });
+            }
+        }
+    }), [entry, onEntryChange]);
+
+    useEffect(() => {
+        latestForFlushRef.current = { title: localTitle, content: entry.content || (editorRef.current?.innerHTML ?? '') };
+    }, [localTitle, entry.content]);
+
     const formatDoc = (command, value = null) => {
-        document.execCommand(command, false, value);
-        editorRef.current.focus();
+        if (command === 'formatBlock' && value) {
+            const currentBlock = document.queryCommandValue('formatBlock');
+            if (currentBlock === value) {
+                document.execCommand('formatBlock', false, 'p');
+            } else {
+                document.execCommand(command, false, value);
+            }
+        } else {
+            document.execCommand(command, false, value);
+        }
+        if (editorRef.current) editorRef.current.focus();
+        checkFormats();
     };
-    const formatButtonClass = "p-1.5 md:p-2 rounded-md bg-gray-800 hover:bg-gray-700 transition-all text-gray-300 hover:text-white disabled:opacity-30";
+
+    const onToolbarMouseDown = (e) => e.preventDefault();
+    const getBtnClass = (isActive) => cn(
+        "p-1.5 md:p-2 rounded-md transition-all disabled:opacity-30",
+        isActive ? "bg-yellow-500 text-black shadow-inner" : "bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white"
+    );
 
     return (
         <section className="flex-grow bg-gradient-to-b from-gray-900 to-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-xl border border-gray-700 animate-fade-in-left h-full">
-            {/* Header Area */}
             <div className="p-5 md:p-7 pb-2">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                    {/* Navigation and Title */}
                     <div className="flex items-center gap-3 w-full">
-                        <Button variant="ghost" size="icon" onClick={() => onNavigate(-1)} className="text-gray-400 hover:text-white shrink-0">
-                            <ChevronLeft />
-                        </Button>
-
+                        <Button variant="ghost" size="icon" onClick={() => onNavigate(-1)} className="text-gray-400 hover:text-white shrink-0"><ChevronLeft /></Button>
                         <div className="relative flex-grow">
                             <input
-                                value={entry.title || ''}
+                                value={localTitle} 
                                 onChange={handleTitleChange}
                                 disabled={isLocked}
                                 className="bg-transparent text-xl md:text-3xl font-bold w-full focus:outline-none border-b-2 border-transparent focus:border-yellow-500 transition-all pb-1 disabled:opacity-70 placeholder:text-gray-600"
                                 placeholder={isFutureDate ? "Time Capsule Title" : "Journal Entry Title"}
                             />
-                            {/* Auto-Save Indicator */}
                             <div className="absolute right-0 top-0 md:top-2 text-xs font-medium flex items-center gap-1.5">
-                                {saveStatus === 'saving' && (
-                                    <span className="text-yellow-500 flex items-center gap-1 animate-pulse">
-                                        <Loader2 className="w-3 h-3 animate-spin" /> Saving...
-                                    </span>
-                                )}
-                                {saveStatus === 'saved' && (
-                                    <span className="text-green-500 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-1 duration-500">
-                                        <Save className="w-3 h-3" /> Saved
-                                    </span>
-                                )}
+                                {saveStatus === 'saving' && <span className="text-yellow-500 flex items-center gap-1 animate-pulse"><Loader2 className="w-3 h-3 animate-spin" /> Saving...</span>}
+                                {saveStatus === 'saved' && <span className="text-green-500 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-1 duration-500"><Save className="w-3 h-3" /> Saved</span>}
                             </div>
                         </div>
-
-                        <Button variant="ghost" size="icon" onClick={() => onNavigate(1)} className="text-gray-400 hover:text-white shrink-0">
-                            <ChevronRight />
-                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => onNavigate(1)} className="text-gray-400 hover:text-white shrink-0"><ChevronRight /></Button>
                     </div>
 
-                    {/* User Badge */}
                     <div className="self-end md:self-auto shrink-0">
                         {!dailyStats.user ? (
-                            <Button size="sm" asChild className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-9 px-4 rounded-full shadow-lg">
-                                <Link href="/login">Sign In</Link>
-                            </Button>
+                            <Button size="sm" asChild className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-9 px-4 rounded-full shadow-lg"><Link href="/login">Sign In</Link></Button>
                         ) : dailyStats.isPro ? (
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-600 shadow-lg border-2 border-white/20" title="Pro User">
-                                <Crown className="text-black w-5 h-5" />
-                            </div>
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-600 shadow-lg border-2 border-white/20" title="Pro User"><Crown className="text-black w-5 h-5" /></div>
                         ) : (
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-700 border-2 border-yellow-500/50 shadow-lg" title="Experience User">
-                                <Star className="text-yellow-500 w-5 h-5" />
-                            </div>
+                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-700 border-2 border-yellow-500/50 shadow-lg" title="Experience User"><Star className="text-yellow-500 w-5 h-5" /></div>
                         )}
                     </div>
                 </div>
@@ -270,13 +335,10 @@ const JournalEditor = ({
                 {isSavingDisabled && (
                     <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg text-center animate-in fade-in slide-in-from-top-2">
                         <p className="font-bold text-yellow-300 text-sm">Journal Limit Reached</p>
-                        <Button asChild size="sm" variant="link" className="text-yellow-200 h-auto p-0">
-                            <Link href="/landing">Upgrade to Pro</Link>
-                        </Button>
+                        <Button asChild size="sm" variant="link" className="text-yellow-200 h-auto p-0"><Link href="/landing">Upgrade to Pro</Link></Button>
                     </div>
                 )}
 
-                {/* Stats / Rings */}
                 <div className="flex-shrink-0 flex items-center gap-4 mb-4 p-3 bg-black/30 rounded-xl backdrop-blur-sm border border-gray-700/50 overflow-x-auto">
                     <h3 className="font-bold text-gray-400 hidden sm:block text-sm uppercase tracking-wide">Daily Snapshot:</h3>
                     <div className="flex items-center gap-6 w-full justify-around sm:justify-start">
@@ -287,16 +349,14 @@ const JournalEditor = ({
                 </div>
             </div>
 
-            {/* Sticky Toolbar */}
             <div className="sticky top-0 z-10 bg-gray-900/95 backdrop-blur border-y border-gray-700 px-5 py-2 flex items-center gap-1 shadow-md">
-                <button className={formatButtonClass} onClick={() => formatDoc('formatBlock', 'p')} aria-label="Paragraph"><ParagraphIcon size={16} /></button>
-                <button className={formatButtonClass} onClick={() => formatDoc('bold')} aria-label="Bold"><Bold size={16} /></button>
-                <button className={formatButtonClass} onClick={() => formatDoc('italic')} aria-label="Italic"><Italic size={16} /></button>
-                <button className={formatButtonClass} onClick={() => formatDoc('insertUnorderedList')} aria-label="Bulleted List"><List size={16} /></button>
-                <button className={formatButtonClass} onClick={() => formatDoc('formatBlock', 'h1')} aria-label="Heading 1"><Heading1 size={16} /></button>
-                <button className={formatButtonClass} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={16} /></button>
+                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.p && !activeFormats.h1 && !activeFormats.h2)} onClick={() => formatDoc('formatBlock', 'p')} aria-label="Paragraph"><ParagraphIcon size={16} /></button>
+                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.bold)} onClick={() => formatDoc('bold')} aria-label="Bold"><Bold size={16} /></button>
+                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.italic)} onClick={() => formatDoc('italic')} aria-label="Italic"><Italic size={16} /></button>
+                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.list)} onClick={() => formatDoc('insertUnorderedList')} aria-label="Bulleted List"><List size={16} /></button>
+                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.h1)} onClick={() => formatDoc('formatBlock', 'h1')} aria-label="Heading 1"><Heading1 size={16} /></button>
+                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.h2)} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={16} /></button>
                 <div className="ml-auto flex items-center gap-2">
-                    {/* Unified Edit/Lock Button for Past and Future Dates */}
                     {(isPastDate || isFutureDate) && !isEditMode && (
                         <Button onClick={() => setIsEditMode(true)} size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 h-8 text-xs" disabled={isSavingDisabled}><Edit size={14} className="mr-1" /> Edit</Button>
                     )}
@@ -306,41 +366,35 @@ const JournalEditor = ({
                 </div>
             </div>
 
-            {/* Editor Content */}
             <div className="flex-grow relative bg-gray-900/50">
-
-                {/* Retrospective Overlay (Past & Empty & Locked) */}
-                {isPastDate && isEmpty && !isEditMode && (
-                    <div
-                        onClick={() => setIsEditMode(true)}
-                        className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-sm cursor-pointer hover:bg-gray-900/50 transition-all group"
-                    >
-                        <div className="bg-gray-800 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform border border-gray-700 group-hover:border-yellow-500">
-                            <History size={32} className="text-gray-400 group-hover:text-yellow-400" />
+                {isContentLoading && (
+                    <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
+                        <div className="flex flex-col items-center">
+                            <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mb-2" />
+                            <span className="text-sm text-gray-300">Loading entry...</span>
                         </div>
+                    </div>
+                )}
+                {isPastDate && isEmpty && !isEditMode && !isContentLoading && (
+                    <div onClick={() => setIsEditMode(true)} className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-sm cursor-pointer hover:bg-gray-900/50 transition-all group">
+                        <div className="bg-gray-800 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform border border-gray-700 group-hover:border-yellow-500"><History size={32} className="text-gray-400 group-hover:text-yellow-400" /></div>
                         <p className="text-lg font-bold text-gray-200 group-hover:text-white">No entry recorded.</p>
                         <p className="text-sm text-gray-400 mt-1">Add a retrospective note? <span className="text-yellow-400 underline">Click to Edit</span></p>
                     </div>
                 )}
-
-                {/* Time Capsule Overlay (Future & Empty & Locked) */}
-                {isFutureDate && isEmpty && !isEditMode && (
-                    <div
-                        onClick={() => setIsEditMode(true)} // Clicking now enters Edit Mode
-                        className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/40 backdrop-blur-[2px] cursor-pointer hover:bg-gray-900/30 transition-all group"
-                    >
-                        <div className="bg-gray-800/80 p-4 rounded-full mb-3 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.3)] group-hover:scale-110 transition-transform">
-                            <Hourglass size={32} className="text-indigo-400" />
-                        </div>
+                {isFutureDate && isEmpty && !isEditMode && !isContentLoading && (
+                    <div onClick={() => setIsEditMode(true)} className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/40 backdrop-blur-[2px] cursor-pointer hover:bg-gray-900/30 transition-all group">
+                        <div className="bg-gray-800/80 p-4 rounded-full mb-3 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.3)] group-hover:scale-110 transition-transform"><Hourglass size={32} className="text-indigo-400" /></div>
                         <p className="text-lg font-bold text-indigo-200">Time Capsule</p>
                         <p className="text-sm text-indigo-300/80 mt-1">Write a note to your future self. <span className="text-white underline">Click to open.</span></p>
                     </div>
                 )}
-
                 <div
                     ref={editorRef}
-                    contentEditable={!isLocked}
-                    onInput={handleContentChange}
+                    contentEditable={!isLocked && !isContentLoading}
+                    onInput={handleContentInput}
+                    onMouseUp={handleSelectionChange}
+                    onKeyUp={handleSelectionChange}
                     className={cn(
                         "prose prose-invert max-w-none w-full h-full overflow-y-auto custom-scrollbar p-6 leading-relaxed focus:outline-none",
                         isLocked ? 'opacity-80' : ''
@@ -350,7 +404,7 @@ const JournalEditor = ({
             </div>
         </section>
     );
-};
+});
 
 // --- Main Journal Page ---
 export default function JournalPage() {
@@ -358,18 +412,17 @@ export default function JournalPage() {
     const { isPro, loading: subLoading } = useSubscription();
     const router = useRouter();
     const supabase = createClient();
-    const [displayName, setDisplayName] = useState(''); // NEW STATE
+    const [displayName, setDisplayName] = useState(''); 
 
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [entry, setEntry] = useState({ id: null, date: null, title: '', content: '' });
     const [allEntries, setAllEntries] = useState({});
     const [greeting, setGreeting] = useState('');
 
-    // UI States
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [saveStatus, setSaveStatus] = useState('idle');
+    const [isContentLoading, setIsContentLoading] = useState(false);
 
-    // Stats State
     const [dailyStats, setDailyStats] = useState({
         entries: { percentage: 0, value: '0/0', limit: 30 },
         tasks: { percentage: 0, value: '0/0' },
@@ -382,36 +435,41 @@ export default function JournalPage() {
     const [filteredEntryDays, setFilteredEntryDays] = useState(null);
     const [isEditMode, setIsEditMode] = useState(false);
 
-    // Modal States
     const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState('signup');
     const [hasCheckedMigration, setHasCheckedMigration] = useState(false);
     const [isEntriesListOpen, setIsEntriesListOpen] = useState(false);
 
+    // Phase 4: Data Risk Popup
+    const [isDataRiskModalOpen, setIsDataRiskModalOpen] = useState(false);
+
+    const editorRef = useRef(null);
+    const entryRef = useRef(entry);
+    entryRef.current = entry;
+
     const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
-
-    // Updated: Count only non-empty entries
-    const journalEntryCount = Object.values(allEntries).filter(e => {
-        const content = e.content ? e.content.replace(/<[^>]*>/g, '').trim() : '';
-        return content.length > 0;
-    }).length;
-
+    const journalEntryCount = Object.keys(allEntries).length;
     const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
     const isLoading = authLoading || subLoading;
 
-    // --- Helpers ---
     const changeDate = (days) => {
+        editorRef.current?.flushSave?.();
         const newDate = new Date(selectedDate);
         newDate.setDate(newDate.getDate() + days);
         setSelectedDate(newDate);
     };
 
-    // --- Fetch Logic ---
+    const safeSetSelectedDate = (date) => {
+        editorRef.current?.flushSave?.();
+        setSelectedDate(date);
+    };
+
     const fetchJournalEntries = useCallback(async () => {
         if (isLoading) return;
 
+        // PHASE 4 LOGIC: If User is logged in but NOT Pro, treat as local storage for fetching.
         if (user && isPro) {
-            const { data, error } = await supabase.from('journal_entries').select('*').eq('user_id', user.id);
+            const { data, error } = await supabase.from('journal_entries').select('id, date, title, user_id').eq('user_id', user.id);
             if (error) { console.error("Error fetching journal entries:", error); setAllEntries({}); }
             else {
                 const entriesMap = data.reduce((acc, entry) => {
@@ -422,9 +480,21 @@ export default function JournalPage() {
                 setAllEntries(entriesMap);
             }
         } else {
+            // Free User or Anonymous -> Use Local Storage
             setAllEntries(getLocalJournals());
         }
     }, [user, isPro, isLoading, supabase]);
+
+    const fetchEntryContent = useCallback(async (dateKey) => {
+        // Only fetch from server if Pro. 
+        if (!user || !isPro) return null;
+        const [y, m, d] = dateKey.split('-').map(Number);
+        const isoDate = new Date(y, m - 1, d).toISOString().split('T')[0];
+
+        const { data, error } = await supabase.from('journal_entries').select('content').eq('user_id', user.id).eq('date', isoDate).single();
+        if (error) return null;
+        return data.content;
+    }, [user, isPro, supabase]);
 
     const fetchDailyStats = useCallback(async () => {
         const today = new Date();
@@ -453,15 +523,11 @@ export default function JournalPage() {
         }));
     }, [supabase, user, isPro]);
 
-    // --- Effects ---
-
     useEffect(() => {
         if (user) {
             const fetchProfileName = async () => {
                 const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).single();
-                if (data?.display_name) {
-                    setDisplayName(data.display_name);
-                }
+                if (data?.display_name) { setDisplayName(data.display_name); }
             };
             fetchProfileName();
         }
@@ -476,12 +542,7 @@ export default function JournalPage() {
     }, [fetchDailyStats]);
 
     useEffect(() => {
-        // Use the updated logic here too for the ring visual
-        const count = Object.values(allEntries).filter(e => {
-            const content = e.content ? e.content.replace(/<[^>]*>/g, '').trim() : '';
-            return content.length > 0;
-        }).length;
-
+        const count = Object.keys(allEntries).length;
         const limit = isPro ? 365 : 30;
         const percentage = Math.min(100, (count / limit) * 100);
         setDailyStats(prev => ({ ...prev, entries: { percentage, value: `${count}/${limit}`, limit } }));
@@ -489,6 +550,25 @@ export default function JournalPage() {
 
     useEffect(() => { fetchJournalEntries(); }, [fetchJournalEntries]);
 
+    // Phase 4: Data Risk Popup Logic
+    useEffect(() => {
+        if (user && !isPro && !isLoading) {
+            const lastWarned = localStorage.getItem('journal_data_risk_popup_last_shown');
+            const now = Date.now();
+            const oneDay = 24 * 60 * 60 * 1000;
+            
+            if (!lastWarned || (now - parseInt(lastWarned)) > oneDay) {
+                 // Check if there is actually data to lose
+                 if (Object.keys(getLocalJournals()).length > 0) {
+                     setIsDataRiskModalOpen(true);
+                     localStorage.setItem('journal_data_risk_popup_last_shown', now.toString());
+                 }
+            }
+        }
+    }, [user, isPro, isLoading]);
+
+
+    // Migration Logic (Keep existing)
     useEffect(() => {
         if (isPro && user && !isLoading && !hasCheckedMigration) {
             setHasCheckedMigration(true);
@@ -504,20 +584,64 @@ export default function JournalPage() {
         }
     }, [isPro, user, isLoading, hasCheckedMigration, supabase, fetchJournalEntries]);
 
+    // Load Content Logic (with Ghost Dot Fix)
     useEffect(() => {
         const dateKey = getDateKey(selectedDate);
-        const saved = allEntries[dateKey] || {};
-        const title = saved.title || selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-        setEntry({ id: saved.id || null, date: dateKey, title, content: saved.content || '' });
-    }, [selectedDate, allEntries]);
-    // 2. Lock Logic Effect: Runs ONLY when you actually change the date
-    // This prevents the app from re-locking while you are typing/saving on the same date.
+        const cachedEntry = allEntries[dateKey];
+        const defaultTitle = selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+        const updateEntryState = (entryData) => {
+             setEntry({
+                id: entryData?.id || null,
+                date: dateKey,
+                title: entryData?.title || defaultTitle,
+                content: entryData?.content || '' 
+            });
+        };
+
+        const loadContent = async () => {
+            if (cachedEntry && typeof cachedEntry.content !== 'undefined') {
+                updateEntryState(cachedEntry);
+                return;
+            }
+            if (cachedEntry && user && isPro) {
+                const currentEntry = entryRef.current;
+                const isSameDate = currentEntry.date === dateKey;
+                const hasContentAlready = currentEntry.content && currentEntry.content.replace(/<[^>]*>/g, '').trim() !== '';
+                // Don't re-fetch or clear when re-opening same date with content (prevents overwriting unsaved or current content)
+                if (isSameDate && hasContentAlready) {
+                    updateEntryState(currentEntry);
+                    return;
+                }
+                setIsContentLoading(true);
+                if (!isSameDate) updateEntryState({ ...cachedEntry, content: '' });
+
+                const content = await fetchEntryContent(dateKey);
+                setIsContentLoading(false);
+
+                // GHOST: If fetched content is empty, remove from cache so count/dots stay correct.
+                if (!content || content.trim() === '') {
+                     setAllEntries(prev => {
+                        const copy = { ...prev };
+                        delete copy[dateKey];
+                        return copy;
+                     });
+                     updateEntryState(null);
+                } else {
+                    const fullEntry = { ...cachedEntry, content: content };
+                    setAllEntries(prev => ({ ...prev, [dateKey]: fullEntry }));
+                    updateEntryState(fullEntry);
+                }
+                return;
+            }
+            updateEntryState(null);
+        };
+        loadContent();
+    }, [selectedDate, allEntries, fetchEntryContent, user, isPro]);
+
     useEffect(() => {
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const check = new Date(selectedDate); check.setHours(0, 0, 0, 0);
-        // If it's Today -> Unlocked (Edit Mode True)
-        // If it's Past/Future -> Locked (Edit Mode False)
-        // This only runs ONCE when you navigate to the date.
         setIsEditMode(check.getTime() === today.getTime());
     }, [selectedDate]);
 
@@ -529,25 +653,30 @@ export default function JournalPage() {
         setFilteredEntryDays(filtered);
     }, [searchQuery, allEntries]);
 
-    // --- Saving Logic ---
-    const timeoutRef = useRef(null);
-    const handleEntryChange = useCallback((newEntry) => {
-        setEntry(newEntry);
+    // Saving Logic (With Phase 4 Checks)
+    const handleEntryChange = useCallback(async (newEntry) => {
         setSaveStatus('saving');
 
         const dateKey = getDateKey(selectedDate);
-        // Only block saving if limit is reached AND this is a NEW entry that actually has content
-        if (isFreeTierLimitReached && !allEntries[dateKey]) {
-            const newContent = newEntry.content?.replace(/<[^>]*>/g, '').trim() || '';
-            if (newContent.length > 0) {
-                setSaveStatus('error');
-                return;
-            }
+        const strippedContent = newEntry.content ? newEntry.content.replace(/<[^>]*>/g, '').trim() : '';
+        const isEmpty = strippedContent.length === 0;
+
+        if (isFreeTierLimitReached && !allEntries[dateKey] && !isEmpty) {
+            setSaveStatus('error');
+            return;
         }
 
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(async () => {
-            if (user && isPro) {
+        // PHASE 4: Only save to Cloud if User AND Pro. Otherwise Local.
+        if (user && isPro) {
+            if (isEmpty && newEntry.id) {
+                await supabase.from('journal_entries').delete().eq('id', newEntry.id);
+                setAllEntries(prev => {
+                    const copy = { ...prev };
+                    delete copy[dateKey];
+                    return copy;
+                });
+                setEntry(prev => ({...prev, id: null}));
+            } else if (!isEmpty) {
                 const payload = {
                     user_id: user.id,
                     date: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).toISOString().split('T')[0],
@@ -555,29 +684,33 @@ export default function JournalPage() {
                     content: newEntry.content,
                 };
                 if (newEntry.id) payload.id = newEntry.id;
+                
                 const { data } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' }).select().single();
                 if (data) {
                     setAllEntries(prev => ({ ...prev, [dateKey]: data }));
                     if (!newEntry.id) setEntry(prev => ({ ...prev, id: data.id }));
                 }
+            }
+        } else {
+            // Local Storage Logic (For Free Users & Anonymous)
+            if (isEmpty) {
+                const allJournals = getLocalJournals();
+                delete allJournals[dateKey];
+                localStorage.setItem('ws_journal_entries', JSON.stringify(allJournals));
+                setAllEntries(allJournals);
             } else {
                 saveLocalJournal(dateKey, { title: newEntry.title, content: newEntry.content });
                 setAllEntries(getLocalJournals());
             }
-            setSaveStatus('saved');
-            setTimeout(() => setSaveStatus('idle'), 2000);
-        }, 1000);
+        }
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
     }, [selectedDate, user, isPro, isFreeTierLimitReached, allEntries, supabase]);
 
-    // --- Popups ---
     const handleEditorClick = () => {
         if (!user) { setModalMode('signup'); setIsSignUpModalOpen(true); return; }
         if (user && !isPro) {
-            const todayStr = new Date().toDateString();
-            if (localStorage.getItem('journal_upgrade_popup_last_shown') !== todayStr) {
-                setModalMode('upgrade'); setIsSignUpModalOpen(true);
-                localStorage.setItem('journal_upgrade_popup_last_shown', todayStr);
-            }
+            // Logic handled by Data Risk Popup, but we can still show upgrade nudge if they hit limits
         }
     };
 
@@ -585,7 +718,6 @@ export default function JournalPage() {
     const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
     const isPastDate = checkDate < today;
     const isFutureDate = checkDate > today;
-
     const editorWrapperProps = !isPro ? { onClickCapture: handleEditorClick } : {};
 
     if (isLoading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white"><Loader2 className="animate-spin mr-2" /> Loading...</div>;
@@ -595,7 +727,28 @@ export default function JournalPage() {
     return (
         <div className="min-h-screen w-full bg-gray-950 text-gray-100 font-sans flex flex-col">
             <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} mode={modalMode} />
-            <JournalEntriesModal isOpen={isEntriesListOpen} setIsOpen={setIsEntriesListOpen} allEntries={allEntries} onSelectEntry={setSelectedDate} />
+            <JournalEntriesModal isOpen={isEntriesListOpen} setIsOpen={setIsEntriesListOpen} allEntries={allEntries} onSelectEntry={safeSetSelectedDate} />
+            
+            {/* Phase 4: Data Risk Modal */}
+             <Dialog open={isDataRiskModalOpen} onOpenChange={setIsDataRiskModalOpen}>
+                <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-yellow-500"><AlertTriangle className="w-5 h-5"/> Data Warning</DialogTitle>
+                        <DialogDescription className="text-gray-300">
+                            You are on the <strong>Free Plan</strong>. Your journal entries are stored <strong>locally on this device</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="bg-yellow-900/20 p-4 rounded-lg border border-yellow-700/50 text-sm text-yellow-200">
+                        <p>If you clear your browser history or cookies, <strong>you will lose your data forever.</strong></p>
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                         <Button variant="ghost" onClick={() => setIsDataRiskModalOpen(false)}>I Understand</Button>
+                         <Button className="bg-yellow-500 text-black hover:bg-yellow-400 font-bold" asChild>
+                            <Link href="/landing">Secure My Data (Upgrade)</Link>
+                         </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
             <style jsx global>{`
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -615,14 +768,27 @@ export default function JournalPage() {
 
             <div className="flex flex-col flex-grow py-4 px-3 sm:px-6 md:px-8 lg:px-12 gap-5 max-w-[1920px] mx-auto w-full">
 
-                {/* Header with Video Background */}
                 <header className="flex-shrink-0 h-48 lg:h-56 relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
-                    <video autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover z-0">
-                        <source src="/video123.mp4" type="video/mp4" />
-                    </video>
+                    <div className="absolute inset-0 w-full h-full z-0">
+                         <Image 
+                            src="/video123.webm" 
+                            alt="Immersive Background" 
+                            fill 
+                            className="object-cover" 
+                            priority
+                            unoptimized 
+                         />
+                    </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-900/40 to-transparent z-10"></div>
                     <div className="absolute inset-0 bg-black/20 z-10"></div>
 
+                    <div className="absolute top-4 right-4 z-20">
+                        <Button asChild variant="secondary" size="sm" className="bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-lg">
+                            <Link href="/" className="flex items-center gap-2">
+                                <Home className="w-4 h-4" /> Home
+                            </Link>
+                        </Button>
+                    </div>
                     <Greeting
                         greeting={greeting}
                         username={displayName || user?.email?.split('@')[0] || 'Explorer'}
@@ -642,13 +808,12 @@ export default function JournalPage() {
                 </div>
 
                 <main className="flex-grow flex flex-col lg:flex-row gap-5 h-full">
-                    {/* Sidebar (Collapsible on Mobile) */}
                     <aside className={cn(
                         "w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 overflow-hidden",
                         isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden"
                     )}>
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
-                            <button onClick={() => setSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">
+                            <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">
                                 Today
                             </button>
                             <div className="relative w-full">
@@ -656,10 +821,9 @@ export default function JournalPage() {
                                 <input type="search" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all" />
                             </div>
                         </div>
-                        <Calendar onDateSelect={setSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
+                        <Calendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
                         <Prompt dailyStats={dailyStats} />
 
-                        {/* Usage Status */}
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
                             {!user ? (
                                 <div className="text-center">
@@ -694,9 +858,9 @@ export default function JournalPage() {
                         </div>
                     </aside>
 
-                    {/* Main Editor Area */}
                     <div {...editorWrapperProps} className="flex-grow min-h-[500px] lg:h-auto">
                         <JournalEditor
+                            ref={editorRef}
                             entry={entry}
                             onEntryChange={handleEntryChange}
                             dailyStats={dailyStats}
@@ -709,6 +873,7 @@ export default function JournalPage() {
                             onEntriesClick={() => setIsEntriesListOpen(true)}
                             saveStatus={saveStatus}
                             onNavigate={changeDate}
+                            isContentLoading={isContentLoading}
                         />
                     </div>
                 </main>

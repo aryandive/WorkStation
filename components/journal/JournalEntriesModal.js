@@ -6,14 +6,8 @@ import { FileText, Calendar, Clock, ChevronRight } from 'lucide-react';
 
 export default function JournalEntriesModal({ isOpen, setIsOpen, allEntries, onSelectEntry }) {
 
-    // Convert entries object to an array and sort by date (newest first)
-    // Convert entries object to an array, filter out empty ones, and sort by date
+    // Convert entries to array, sort by date (newest first). Show all entries (dots/count match).
     const sortedEntries = Object.entries(allEntries)
-        .filter(([_, data]) => {
-            // Check if content exists and has text (ignoring HTML tags)
-            const cleanContent = data.content ? data.content.replace(/<[^>]*>/g, '').trim() : '';
-            return cleanContent.length > 0;
-        })
         .map(([dateKey, data]) => {
             const [year, month, day] = dateKey.split('-').map(Number);
             const dateObj = new Date(year, month - 1, day);
@@ -22,8 +16,12 @@ export default function JournalEntriesModal({ isOpen, setIsOpen, allEntries, onS
                 dateKey,
                 dateObj,
                 title: data.title || 'Untitled Entry',
+                // Use updated_at if available, otherwise fallback to created_at
                 timestamp: data.updated_at || data.created_at || null,
-                snippet: data.content ? data.content.replace(/<[^>]*>/g, '').substring(0, 60) + '...' : ''
+                // Handle snippet gracefully if content is not loaded yet
+                snippet: data.content 
+                    ? data.content.replace(/<[^>]*>/g, '').substring(0, 60) + '...' 
+                    : 'Click to read entry...'
             };
         })
         .sort((a, b) => b.dateObj - a.dateObj);
