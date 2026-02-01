@@ -1,451 +1,62 @@
 'use client';
-import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+
+// --- Icons & UI ---
+import { 
+    Search, Loader2, PanelTopClose, PanelTopOpen, AlertTriangle, Home, Crown 
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { cn } from "@/lib/utils";
+
+// --- Logic & Data ---
 import { saveLocalJournal, getLocalJournals } from '@/lib/localJournal';
 import { createClient } from '@/utils/supabase/client';
 import eventBus from '@/lib/eventBus';
-import {
-    ChevronLeft, ChevronRight, RefreshCw, Bold, Italic, List, Heading1, Heading2, Search,
-    Calendar as CalendarIcon, Type as ParagraphIcon, Bot, Lock, Edit, Zap, User, Star, Crown,
-    LogIn, Save, Loader2, PanelTopClose, PanelTopOpen, ArrowLeft, ArrowRight, Hourglass, History, AlertTriangle, Home
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
 import { useSubscription } from '@/context/SubscriptionContext';
-import Link from 'next/link';
+
+// --- Components ---
+import Greeting from '@/components/journal/Greeting';
+import ActivityRings from '@/components/journal/ActivityRings';
+import ReflectivePrompt from '@/components/journal/ReflectivePrompt';
+import JournalCalendar from '@/components/journal/JournalCalendar';
+import TextEditor from '@/components/journal/TextEditor';
 import SignUpModal from '@/components/auth/SignUpModal';
-import { Label } from '@/components/ui/label';
 import JournalEntriesModal from '@/components/journal/JournalEntriesModal';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'; // Ensure these are imported
 
-// --- Constants ---
-const HIGH_PERFORMANCE_PROMPTS = ["You had a great focus day! What was your secret?", "Biggest win today?", "How to carry this momentum to tomorrow?"];
-const LOW_PERFORMANCE_PROMPTS = ["What blocked you today?", "Biggest distraction?", "One small change for tomorrow?"];
-const GENERAL_PROMPTS = ["What are you grateful for?", "One thing you learned?", "Interesting problem solved?"];
-
-/** Returns true if the entry has non-empty content (excludes ghost/empty entries). */
-function hasRealContent(entry) {
-    if (!entry || typeof entry.content !== 'string') return false;
-    return entry.content.replace(/<[^>]*>/g, '').trim() !== '';
-}
-
-// --- Sub-Components ---
-
-const Greeting = ({ greeting, username }) => (
-    <div className="absolute bottom-6 left-6 z-20 animate-fade-in">
-        <h1 className="text-2xl md:text-3xl font-bold text-white drop-shadow-md">
-            {greeting}, <span className="text-yellow-400">{username}</span>
-        </h1>
-    </div>
-);
-
-const ActivityRing = ({ percentage, color, label, value, onClick }) => {
-    const [animatedPercentage, setAnimatedPercentage] = useState(0);
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setAnimatedPercentage(percentage);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [percentage]);
-    return (
-        <div
-            onClick={onClick}
-            className={`relative w-16 h-16 lg:w-20 lg:h-20 group ${onClick ? 'cursor-pointer' : ''}`}
-        >
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
-                <span className={`font-bold text-base lg:text-lg transition-all duration-500 ${onClick ? 'group-hover:scale-110 group-hover:text-yellow-400' : ''}`}>{value}</span>
-                <span className="text-xs -mt-1 opacity-80">{label}</span>
-            </div>
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3"></circle>
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke={color} strokeWidth="3" strokeDasharray={`${animatedPercentage}, 100`} strokeLinecap="round" className="transition-all duration-1000 ease-out"></circle>
-            </svg>
-        </div>
-    );
-};
-
-const Prompt = ({ dailyStats }) => {
-    const [prompt, setPrompt] = useState("Let's reflect on your day.");
-    const [isRefreshing, setIsRefreshing] = useState(false);
-
-    const refreshPrompt = useCallback(() => {
-        setIsRefreshing(true);
-        let promptPool = GENERAL_PROMPTS;
-        if (dailyStats && dailyStats.sessions.value) {
-            const pomosCompleted = parseInt(dailyStats.sessions.value, 10);
-            if (pomosCompleted >= 4) promptPool = HIGH_PERFORMANCE_PROMPTS;
-            else if (pomosCompleted <= 1 && new Date().getHours() > 18) promptPool = LOW_PERFORMANCE_PROMPTS;
-        }
-        setPrompt(currentPrompt => {
-            let newPrompt = currentPrompt;
-            while (newPrompt === currentPrompt) {
-                newPrompt = promptPool[Math.floor(Math.random() * promptPool.length)];
-            }
-            return newPrompt;
-        });
-        setTimeout(() => setIsRefreshing(false), 500);
-    }, [dailyStats]);
-
-    useEffect(() => { refreshPrompt(); }, [dailyStats, refreshPrompt]);
-
-    return (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
-            <h2 className="font-bold mb-2 text-yellow-400 text-sm uppercase tracking-wider flex items-center"><Bot className="mr-2 w-4 h-4" /> Reflective Prompt</h2>
-            <div className="flex items-center gap-2 p-3 bg-black/30 rounded-lg transition-all duration-300 hover:bg-black/40">
-                <p className="text-sm text-gray-200 flex-grow transition-opacity duration-300">{prompt}</p>
-                <button onClick={refreshPrompt} className="p-2 rounded-full bg-gray-700 hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 flex-shrink-0"><RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /></button>
-            </div>
-        </div>
-    );
-};
-
-const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
-    const [displayDate, setDisplayDate] = useState(new Date(selectedDate));
-    const [transitionDirection, setTransitionDirection] = useState('right');
-
-    useEffect(() => { setDisplayDate(new Date(selectedDate)); }, [selectedDate]);
-
-    const changeMonth = (direction) => {
-        setTransitionDirection(direction === 'left' ? 'right' : 'left');
-        setTimeout(() => {
-            setTransitionDirection(direction);
-            const newDate = new Date(displayDate);
-            newDate.setMonth(newDate.getMonth() + (direction === 'left' ? -1 : 1));
-            setDisplayDate(newDate);
-        }, 150)
-    };
-
-    const renderCalendar = () => {
-        const month = displayDate.getMonth();
-        const year = displayDate.getFullYear();
-        const firstDayOfMonth = new Date(year, month, 1).getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-        const days = Array.from({ length: firstDayOfMonth }, (_, i) => <div key={`empty-${i}`}></div>);
-
-        for (let i = 1; i <= daysInMonth; i++) {
-            const date = new Date(year, month, i);
-            const dateKey = `${year}-${month + 1}-${i}`;
-            const entryForDay = allEntries[dateKey];
-            const hasEntry = !!entryForDay; 
-
-            const isSelected = date.toDateString() === selectedDate.toDateString();
-            const isToday = date.toDateString() === new Date().toDateString();
-            const isFilteredOut = searchFilter && hasEntry && !searchFilter.includes(dateKey);
-
-            days.push(
-                <TooltipProvider key={i}>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <div
-                                onClick={() => onDateSelect(date)}
-                                className={cn(
-                                    "p-1 cursor-pointer rounded-full text-center relative transition-all duration-200 h-8 w-8 flex items-center justify-center text-sm",
-                                    isSelected ? 'bg-yellow-500 text-black font-bold shadow-lg scale-110 z-10' : 'hover:bg-gray-700 text-gray-300',
-                                    isToday && !isSelected ? 'border-2 border-yellow-500 text-yellow-500 font-semibold' : '',
-                                    isFilteredOut ? 'opacity-20 pointer-events-none' : ''
-                                )}
-                            >
-                                {i}
-                                {hasEntry && !isSelected && (<span className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-yellow-500"></span>)}
-                            </div>
-                        </TooltipTrigger>
-                        {hasEntry && (
-                            <TooltipContent className="bg-gray-800 border-gray-700 text-white text-xs">
-                                <p>{entryForDay.title || "Untitled Entry"}</p>
-                            </TooltipContent>
-                        )}
-                    </Tooltip>
-                </TooltipProvider>
-            );
-        }
-
-        return (
-            <div className={`animate-fade-in-${transitionDirection}`}>
-                <div className="flex justify-between items-center mb-4">
-                    <button onClick={() => changeMonth('left')} className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors"><ChevronLeft size={16} /></button>
-                    <h3 className="font-bold text-base flex items-center"><CalendarIcon className="mr-2 w-4 h-4 text-yellow-500" />{displayDate.toLocaleString('default', { month: 'long' })} {displayDate.getFullYear()}</h3>
-                    <button onClick={() => changeMonth('right')} className="p-1.5 rounded-full bg-gray-800 hover:bg-gray-700 transition-colors"><ChevronRight size={16} /></button>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-xs mb-2">
-                    {dayHeaders.map((day, index) => (<div key={`${day}-${index}`} className="font-bold text-gray-500 text-center">{day}</div>))}
-                </div>
-                <div className="grid grid-cols-7 gap-1">
-                    {days}
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex-grow">
-            {renderCalendar()}
-        </div>
-    );
-};
-
-const JournalEditor = forwardRef(function JournalEditor({
-    entry, onEntryChange, dailyStats, isPastDate, isFutureDate, isEditMode, setIsEditMode,
-    isSavingDisabled, onEntriesClick, saveStatus, onNavigate, isContentLoading
-}, ref) {
-    const editorRef = useRef(null);
-    const [localTitle, setLocalTitle] = useState(entry.title || '');
-    const [activeFormats, setActiveFormats] = useState({
-        bold: false, italic: false, list: false, h1: false, h2: false, p: false
-    });
-    const saveTimeoutRef = useRef(null);
-    const latestForFlushRef = useRef({ title: entry.title || '', content: entry.content || '' });
-
-    const isLocked = ((isPastDate || isFutureDate) && !isEditMode);
-    const isEmpty = !entry.content || entry.content.replace(/<[^>]*>/g, '').trim() === '';
-
-    const checkFormats = () => {
-        if (!document) return;
-        const getVal = (cmd) => document.queryCommandState(cmd);
-        const getBlock = () => document.queryCommandValue('formatBlock');
-        setActiveFormats({
-            bold: getVal('bold'),
-            italic: getVal('italic'),
-            list: getVal('insertUnorderedList'),
-            h1: getBlock() === 'h1',
-            h2: getBlock() === 'h2',
-            p: getBlock() === 'p' || getBlock() === 'div'
-        });
-    };
-
-    const handleSelectionChange = () => { checkFormats(); };
-
-    useEffect(() => {
-        setLocalTitle(entry.title || '');
-        if (editorRef.current) {
-            editorRef.current.innerHTML = entry.content || '';
-        }
-        setActiveFormats({ bold: false, italic: false, list: false, h1: false, h2: false, p: false });
-        // Intentionally only when date changes so we don't reset editor on every content/title update
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [entry.date]);
-
-    // Sync title when entry.title updates from server (e.g. after refresh for today — entry.date doesn't change so the effect above doesn't run)
-    useEffect(() => {
-        setLocalTitle(entry.title || '');
-    }, [entry.title]);
-
-    useEffect(() => {
-        // Only run if we are done loading and actually have an entry to show
-        if (!isContentLoading && editorRef.current && entry.content) {
-            
-            const currentHTML = editorRef.current.innerHTML;
-            const currentText = editorRef.current.innerText.trim();
-
-            // 1. Is the editor visually empty? (No visible text)
-            const hasNoText = currentText.length === 0;
-
-            // 2. Is the content just HTML tags with no real words? 
-            // This catches the "<div><br></div>" ghost tags your database saved.
-            const hasNoRealContent = currentHTML.replace(/<[^>]*>/g, '').trim().length === 0;
-
-            // 3. Safety: Don't overwrite if there is an image (we don't want to delete it)
-            const hasNoImages = !currentHTML.includes('<img');
-
-            // FINAL CHECK: If it looks empty, overwrite it with the saved data.
-            if ((hasNoText || hasNoRealContent) && hasNoImages) {
-                // Prevent unnecessary updates if it's already matching
-                if (currentHTML !== entry.content) {
-                    editorRef.current.innerHTML = entry.content;
-                }
-            }
-        }
-    }, [isContentLoading, entry.content]);
-
-    const triggerSave = useCallback((newTitle, newContent) => {
-        latestForFlushRef.current = { title: newTitle, content: newContent };
-        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = setTimeout(() => {
-            onEntryChange({ ...entry, title: newTitle, content: newContent });
-        }, 500);
-    }, [entry, onEntryChange]);
-
-    const handleContentInput = (e) => {
-        const content = e.currentTarget.innerHTML;
-        latestForFlushRef.current = { ...latestForFlushRef.current, content };
-        triggerSave(localTitle, content);
-    };
-
-    const handleTitleChange = (e) => {
-        const title = e.target.value;
-        setLocalTitle(title);
-        latestForFlushRef.current = { ...latestForFlushRef.current, title };
-        const content = editorRef.current ? editorRef.current.innerHTML : '';
-        latestForFlushRef.current = { ...latestForFlushRef.current, content };
-        triggerSave(title, content);
-    };
-
-    // Expose flush so parent can save current content before changing date
-    useImperativeHandle(ref, () => ({
-        flushSave: () => {
-            if (saveTimeoutRef.current) {
-                clearTimeout(saveTimeoutRef.current);
-                saveTimeoutRef.current = null;
-            }
-            const title = latestForFlushRef.current.title;
-            const content = editorRef.current?.innerHTML ?? latestForFlushRef.current.content;
-            if (title !== undefined || content !== undefined) {
-                onEntryChange({ ...entry, title, content });
-            }
-        }
-    }), [entry, onEntryChange]);
-
-    useEffect(() => {
-        latestForFlushRef.current = { title: localTitle, content: entry.content || (editorRef.current?.innerHTML ?? '') };
-    }, [localTitle, entry.content]);
-
-    const formatDoc = (command, value = null) => {
-        if (command === 'formatBlock' && value) {
-            const currentBlock = document.queryCommandValue('formatBlock');
-            if (currentBlock === value) {
-                document.execCommand('formatBlock', false, 'p');
-            } else {
-                document.execCommand(command, false, value);
-            }
-        } else {
-            document.execCommand(command, false, value);
-        }
-        if (editorRef.current) editorRef.current.focus();
-        checkFormats();
-    };
-
-    const onToolbarMouseDown = (e) => e.preventDefault();
-    const getBtnClass = (isActive) => cn(
-        "p-1.5 md:p-2 rounded-md transition-all disabled:opacity-30",
-        isActive ? "bg-yellow-500 text-black shadow-inner" : "bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white"
-    );
-
-    return (
-        <section className="flex-grow bg-gradient-to-b from-gray-900 to-gray-800 rounded-2xl flex flex-col overflow-hidden shadow-xl border border-gray-700 animate-fade-in-left h-full">
-            <div className="p-5 md:p-7 pb-2">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                    <div className="flex items-center gap-3 w-full">
-                        <Button variant="ghost" size="icon" onClick={() => onNavigate(-1)} className="text-gray-400 hover:text-white shrink-0"><ChevronLeft /></Button>
-                        <div className="relative flex-grow">
-                            <input
-                                value={localTitle} 
-                                onChange={handleTitleChange}
-                                disabled={isLocked}
-                                className="bg-transparent text-xl md:text-3xl font-bold w-full focus:outline-none border-b-2 border-transparent focus:border-yellow-500 transition-all pb-1 disabled:opacity-70 placeholder:text-gray-600"
-                                placeholder={isFutureDate ? "Time Capsule Title" : "Journal Entry Title"}
-                            />
-                            <div className="absolute right-0 top-0 md:top-2 text-xs font-medium flex items-center gap-1.5">
-                                {saveStatus === 'saving' && <span className="text-yellow-500 flex items-center gap-1 animate-pulse"><Loader2 className="w-3 h-3 animate-spin" /> Saving...</span>}
-                                {saveStatus === 'saved' && <span className="text-green-500 flex items-center gap-1 animate-in fade-in slide-in-from-bottom-1 duration-500"><Save className="w-3 h-3" /> Saved</span>}
-                            </div>
-                        </div>
-                        <Button variant="ghost" size="icon" onClick={() => onNavigate(1)} className="text-gray-400 hover:text-white shrink-0"><ChevronRight /></Button>
-                    </div>
-
-                    <div className="self-end md:self-auto shrink-0">
-                        {!dailyStats.user ? (
-                            <Button size="sm" asChild className="bg-yellow-500 hover:bg-yellow-400 text-black font-bold h-9 px-4 rounded-full shadow-lg"><Link href="/login">Sign In</Link></Button>
-                        ) : dailyStats.isPro ? (
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gradient-to-r from-yellow-400 to-yellow-600 shadow-lg border-2 border-white/20" title="Pro User"><Crown className="text-black w-5 h-5" /></div>
-                        ) : (
-                            <div className="flex items-center justify-center w-10 h-10 rounded-full bg-gray-700 border-2 border-yellow-500/50 shadow-lg" title="Experience User"><Star className="text-yellow-500 w-5 h-5" /></div>
-                        )}
-                    </div>
-                </div>
-
-                {isSavingDisabled && (
-                    <div className="mb-4 p-3 bg-yellow-900/30 border border-yellow-700 rounded-lg text-center animate-in fade-in slide-in-from-top-2">
-                        <p className="font-bold text-yellow-300 text-sm">Journal Limit Reached</p>
-                        <Button asChild size="sm" variant="link" className="text-yellow-200 h-auto p-0"><Link href="/landing">Upgrade to Pro</Link></Button>
-                    </div>
-                )}
-
-                <div className="flex-shrink-0 flex items-center gap-4 mb-4 p-3 bg-black/30 rounded-xl backdrop-blur-sm border border-gray-700/50 overflow-x-auto">
-                    <h3 className="font-bold text-gray-400 hidden sm:block text-sm uppercase tracking-wide">Daily Snapshot:</h3>
-                    <div className="flex items-center gap-6 w-full justify-around sm:justify-start">
-                        <ActivityRing percentage={dailyStats.entries.percentage} color="#38B2AC" value={dailyStats.entries.value} label="Entries" onClick={onEntriesClick} />
-                        <ActivityRing percentage={dailyStats.tasks.percentage} color="#48BB78" value={dailyStats.tasks.value} label="Tasks" />
-                        <ActivityRing percentage={dailyStats.sessions.percentage} color="#FBBF24" value={dailyStats.sessions.value} label="Focus" />
-                    </div>
-                </div>
-            </div>
-
-            <div className="sticky top-0 z-10 bg-gray-900/95 backdrop-blur border-y border-gray-700 px-5 py-2 flex items-center gap-1 shadow-md">
-                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.p && !activeFormats.h1 && !activeFormats.h2)} onClick={() => formatDoc('formatBlock', 'p')} aria-label="Paragraph"><ParagraphIcon size={16} /></button>
-                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.bold)} onClick={() => formatDoc('bold')} aria-label="Bold"><Bold size={16} /></button>
-                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.italic)} onClick={() => formatDoc('italic')} aria-label="Italic"><Italic size={16} /></button>
-                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.list)} onClick={() => formatDoc('insertUnorderedList')} aria-label="Bulleted List"><List size={16} /></button>
-                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.h1)} onClick={() => formatDoc('formatBlock', 'h1')} aria-label="Heading 1"><Heading1 size={16} /></button>
-                <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.h2)} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={16} /></button>
-                <div className="ml-auto flex items-center gap-2">
-                    {(isPastDate || isFutureDate) && !isEditMode && (
-                        <Button onClick={() => setIsEditMode(true)} size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 h-8 text-xs" disabled={isSavingDisabled}><Edit size={14} className="mr-1" /> Edit</Button>
-                    )}
-                    {(isPastDate || isFutureDate) && isEditMode && (
-                        <Button onClick={() => setIsEditMode(false)} size="sm" variant="outline" className="text-yellow-400 border-yellow-500 hover:bg-yellow-500/10 h-8 text-xs"><Lock size={14} className="mr-1" /> Lock</Button>
-                    )}
-                </div>
-            </div>
-
-            <div className="flex-grow relative bg-gray-900/50">
-                {isContentLoading && (
-                    <div className="absolute inset-0 z-30 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
-                        <div className="flex flex-col items-center">
-                            <Loader2 className="w-8 h-8 text-yellow-500 animate-spin mb-2" />
-                            <span className="text-sm text-gray-300">Loading entry...</span>
-                        </div>
-                    </div>
-                )}
-                {isPastDate && isEmpty && !isEditMode && !isContentLoading && (
-                    <div onClick={() => setIsEditMode(true)} className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-sm cursor-pointer hover:bg-gray-900/50 transition-all group">
-                        <div className="bg-gray-800 p-4 rounded-full mb-3 group-hover:scale-110 transition-transform border border-gray-700 group-hover:border-yellow-500"><History size={32} className="text-gray-400 group-hover:text-yellow-400" /></div>
-                        <p className="text-lg font-bold text-gray-200 group-hover:text-white">No entry recorded.</p>
-                        <p className="text-sm text-gray-400 mt-1">Add a retrospective note? <span className="text-yellow-400 underline">Click to Edit</span></p>
-                    </div>
-                )}
-                {isFutureDate && isEmpty && !isEditMode && !isContentLoading && (
-                    <div onClick={() => setIsEditMode(true)} className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/40 backdrop-blur-[2px] cursor-pointer hover:bg-gray-900/30 transition-all group">
-                        <div className="bg-gray-800/80 p-4 rounded-full mb-3 border border-indigo-500/50 shadow-[0_0_15px_rgba(99,102,241,0.3)] group-hover:scale-110 transition-transform"><Hourglass size={32} className="text-indigo-400" /></div>
-                        <p className="text-lg font-bold text-indigo-200">Time Capsule</p>
-                        <p className="text-sm text-indigo-300/80 mt-1">Write a note to your future self. <span className="text-white underline">Click to open.</span></p>
-                    </div>
-                )}
-                <div
-                    ref={editorRef}
-                    contentEditable={!isLocked && !isContentLoading}
-                    onInput={handleContentInput}
-                    onMouseUp={handleSelectionChange}
-                    onKeyUp={handleSelectionChange}
-                    className={cn(
-                        "prose prose-invert max-w-none w-full h-full overflow-y-auto custom-scrollbar p-6 leading-relaxed focus:outline-none",
-                        isLocked ? 'opacity-80' : ''
-                    )}
-                    placeholder={isFutureDate ? "Dear Future Me..." : "Start writing here..."}
-                ></div>
-            </div>
-        </section>
-    );
-});
-
-// --- Main Journal Page ---
 export default function JournalPage() {
+    // --- Auth & Data State ---
     const { user, loading: authLoading } = useAuth();
     const { isPro, loading: subLoading } = useSubscription();
     const router = useRouter();
     const supabase = createClient();
+    
+    // --- UI State ---
+    const [greeting, setGreeting] = useState('');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [displayName, setDisplayName] = useState(''); 
-
+    const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
+    const [modalMode, setModalMode] = useState('signup');
+    const [isEntriesListOpen, setIsEntriesListOpen] = useState(false);
+    const [isDataRiskModalOpen, setIsDataRiskModalOpen] = useState(false);
+    
+    // --- Journal State ---
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [entry, setEntry] = useState({ id: null, date: null, title: '', content: '' });
     const [allEntries, setAllEntries] = useState({});
-    const [greeting, setGreeting] = useState('');
-
-    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [saveStatus, setSaveStatus] = useState('idle');
     const [isContentLoading, setIsContentLoading] = useState(false);
+    const [isEditMode, setIsEditMode] = useState(false);
 
+    // --- Search State ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filteredEntryDays, setFilteredEntryDays] = useState(null);
+
+    // --- Stats State ---
     const [dailyStats, setDailyStats] = useState({
         entries: { percentage: 0, value: '0/0', limit: 30 },
         tasks: { percentage: 0, value: '0/0' },
@@ -454,26 +65,17 @@ export default function JournalPage() {
         isPro: false
     });
 
-    const [searchQuery, setSearchQuery] = useState('');
-    const [filteredEntryDays, setFilteredEntryDays] = useState(null);
-    const [isEditMode, setIsEditMode] = useState(false);
-
-    const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
-    const [modalMode, setModalMode] = useState('signup');
-    const [hasCheckedMigration, setHasCheckedMigration] = useState(false);
-    const [isEntriesListOpen, setIsEntriesListOpen] = useState(false);
-
-    // Phase 4: Data Risk Popup
-    const [isDataRiskModalOpen, setIsDataRiskModalOpen] = useState(false);
-
+    // Refs
     const editorRef = useRef(null);
     const entryRef = useRef(entry);
     entryRef.current = entry;
 
+    // --- Helpers ---
     const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
     const journalEntryCount = Object.keys(allEntries).length;
     const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
     const isLoading = authLoading || subLoading;
+    const reducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
     const changeDate = (days) => {
         editorRef.current?.flushSave?.();
@@ -487,38 +89,30 @@ export default function JournalPage() {
         setSelectedDate(date);
     };
 
+    // --- Data Fetching ---
     const fetchJournalEntries = useCallback(async () => {
         if (isLoading) return;
-
-        // PHASE 4 LOGIC: If User is logged in but NOT Pro, treat as local storage for fetching.
         if (user && isPro) {
             const { data, error } = await supabase.from('journal_entries').select('id, date, title, user_id').eq('user_id', user.id);
             if (error) { console.error("Error fetching journal entries:", error); setAllEntries({}); }
             else {
                 const entriesMap = data.reduce((acc, entry) => {
-                    // Parse date as calendar date only (YYYY-MM-DD) to avoid timezone shift.
-                    // Supabase may return "2026-02-01" or "2026-02-01T00:00:00.000Z"; UTC midnight would shift day in some timezones.
                     const dateStr = entry.date.includes('T') ? entry.date.split('T')[0] : entry.date;
                     const [y, m, d] = dateStr.split('-').map(Number);
-                    const dateKey = `${y}-${m}-${d}`;
-                    acc[dateKey] = entry;
+                    acc[`${y}-${m}-${d}`] = entry;
                     return acc;
                 }, {});
                 setAllEntries(entriesMap);
             }
         } else {
-            // Free User or Anonymous -> Use Local Storage
             setAllEntries(getLocalJournals());
         }
     }, [user, isPro, isLoading, supabase]);
 
     const fetchEntryContent = useCallback(async (dateKey) => {
-        // Only fetch from server if Pro. 
         if (!user || !isPro) return null;
         const [y, m, d] = dateKey.split('-').map(Number);
-        // Build YYYY-MM-DD from parts (no Date/toISOString) so query matches stored calendar date in all timezones.
         const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-
         const { data, error } = await supabase.from('journal_entries').select('content').eq('user_id', user.id).eq('date', isoDate).single();
         if (error) return null;
         return data.content;
@@ -551,6 +145,7 @@ export default function JournalPage() {
         }));
     }, [supabase, user, isPro]);
 
+    // --- Effects ---
     useEffect(() => {
         if (user) {
             const fetchProfileName = async () => {
@@ -578,15 +173,13 @@ export default function JournalPage() {
 
     useEffect(() => { fetchJournalEntries(); }, [fetchJournalEntries]);
 
-    // Phase 4: Data Risk Popup Logic
+    // Risk Popup Logic
     useEffect(() => {
         if (user && !isPro && !isLoading) {
             const lastWarned = localStorage.getItem('journal_data_risk_popup_last_shown');
             const now = Date.now();
             const oneDay = 24 * 60 * 60 * 1000;
-            
             if (!lastWarned || (now - parseInt(lastWarned)) > oneDay) {
-                 // Check if there is actually data to lose
                  if (Object.keys(getLocalJournals()).length > 0) {
                      setIsDataRiskModalOpen(true);
                      localStorage.setItem('journal_data_risk_popup_last_shown', now.toString());
@@ -595,25 +188,7 @@ export default function JournalPage() {
         }
     }, [user, isPro, isLoading]);
 
-
-    // Migration Logic (Keep existing)
-    useEffect(() => {
-        if (isPro && user && !isLoading && !hasCheckedMigration) {
-            setHasCheckedMigration(true);
-            const local = getLocalJournals();
-            if (Object.keys(local).length > 0) {
-                const formatted = Object.entries(local).map(([k, v]) => {
-                    const [y, m, d] = k.split('-').map(Number);
-                    const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                    return { user_id: user.id, date: isoDate, title: v.title, content: v.content };
-                });
-                supabase.from('journal_entries').upsert(formatted, { onConflict: 'user_id, date' })
-                    .then(() => { localStorage.removeItem('ws_journal_entries'); fetchJournalEntries(); });
-            }
-        }
-    }, [isPro, user, isLoading, hasCheckedMigration, supabase, fetchJournalEntries]);
-
-    // Load Content Logic (with Ghost Dot Fix)
+    // Load Content Logic
     useEffect(() => {
         const dateKey = getDateKey(selectedDate);
         const cachedEntry = allEntries[dateKey];
@@ -637,7 +212,7 @@ export default function JournalPage() {
                 const currentEntry = entryRef.current;
                 const isSameDate = currentEntry.date === dateKey;
                 const hasContentAlready = currentEntry.content && currentEntry.content.replace(/<[^>]*>/g, '').trim() !== '';
-                // Don't re-fetch or clear when re-opening same date with content (prevents overwriting unsaved or current content)
+                
                 if (isSameDate && hasContentAlready) {
                     updateEntryState(currentEntry);
                     return;
@@ -648,7 +223,6 @@ export default function JournalPage() {
                 const content = await fetchEntryContent(dateKey);
                 setIsContentLoading(false);
 
-                // GHOST: If fetched content is empty, remove from cache so count/dots stay correct.
                 if (!content || content.trim() === '') {
                      setAllEntries(prev => {
                         const copy = { ...prev };
@@ -682,10 +256,9 @@ export default function JournalPage() {
         setFilteredEntryDays(filtered);
     }, [searchQuery, allEntries]);
 
-    // Saving Logic (With Phase 4 Checks)
+    // Saving Logic
     const handleEntryChange = useCallback(async (newEntry) => {
         setSaveStatus('saving');
-
         const dateKey = getDateKey(selectedDate);
         const strippedContent = newEntry.content ? newEntry.content.replace(/<[^>]*>/g, '').trim() : '';
         const isEmpty = strippedContent.length === 0;
@@ -695,28 +268,17 @@ export default function JournalPage() {
             return;
         }
 
-        // PHASE 4: Only save to Cloud if User AND Pro. Otherwise Local.
         if (user && isPro) {
             if (isEmpty && newEntry.id) {
                 await supabase.from('journal_entries').delete().eq('id', newEntry.id);
-                setAllEntries(prev => {
-                    const copy = { ...prev };
-                    delete copy[dateKey];
-                    return copy;
-                });
+                setAllEntries(prev => { const copy = { ...prev }; delete copy[dateKey]; return copy; });
                 setEntry(prev => ({...prev, id: null}));
             } else if (!isEmpty) {
                 const y = selectedDate.getFullYear();
                 const m = selectedDate.getMonth() + 1;
                 const d = selectedDate.getDate();
-                // Build YYYY-MM-DD from local date parts (no toISOString) so we store the user's calendar date in all timezones.
                 const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                const payload = {
-                    user_id: user.id,
-                    date: isoDate,
-                    title: newEntry.title,
-                    content: newEntry.content,
-                };
+                const payload = { user_id: user.id, date: isoDate, title: newEntry.title, content: newEntry.content };
                 if (newEntry.id) payload.id = newEntry.id;
                 
                 const { data } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' }).select().single();
@@ -726,7 +288,6 @@ export default function JournalPage() {
                 }
             }
         } else {
-            // Local Storage Logic (For Free Users & Anonymous)
             if (isEmpty) {
                 const allJournals = getLocalJournals();
                 delete allJournals[dateKey];
@@ -742,28 +303,21 @@ export default function JournalPage() {
     }, [selectedDate, user, isPro, isFreeTierLimitReached, allEntries, supabase]);
 
     const handleEditorClick = () => {
-        if (!user) { setModalMode('signup'); setIsSignUpModalOpen(true); return; }
-        if (user && !isPro) {
-            // Logic handled by Data Risk Popup, but we can still show upgrade nudge if they hit limits
-        }
+        if (!user) { setModalMode('signup'); setIsSignUpModalOpen(true); }
     };
 
+    if (isLoading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white"><Loader2 className="animate-spin mr-2" /> Loading...</div>;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
     const isPastDate = checkDate < today;
     const isFutureDate = checkDate > today;
     const editorWrapperProps = !isPro ? { onClickCapture: handleEditorClick } : {};
 
-    if (isLoading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white"><Loader2 className="animate-spin mr-2" /> Loading...</div>;
-
-    const reducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
-
     return (
         <div className="min-h-screen w-full bg-gray-950 text-gray-100 font-sans flex flex-col">
             <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} mode={modalMode} />
             <JournalEntriesModal isOpen={isEntriesListOpen} setIsOpen={setIsEntriesListOpen} allEntries={allEntries} onSelectEntry={safeSetSelectedDate} />
             
-            {/* Phase 4: Data Risk Modal */}
              <Dialog open={isDataRiskModalOpen} onOpenChange={setIsDataRiskModalOpen}>
                 <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-md">
                     <DialogHeader>
@@ -804,15 +358,7 @@ export default function JournalPage() {
 
                 <header className="flex-shrink-0 h-48 lg:h-56 relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
                     <div className="absolute inset-0 w-full h-full z-0">
-                        <video
-                            src="/video123.webm"
-                            autoPlay
-                            loop
-                            muted
-                            playsInline
-                            className="absolute inset-0 w-full h-full object-cover"
-                            aria-hidden
-                        />
+                        <video src="/video123.webm" autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" aria-hidden />
                     </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-900/40 to-transparent z-10"></div>
                     <div className="absolute inset-0 bg-black/20 z-10"></div>
@@ -824,49 +370,34 @@ export default function JournalPage() {
                             </Link>
                         </Button>
                     </div>
-                    <Greeting
-                        greeting={greeting}
-                        username={displayName || user?.email?.split('@')[0] || 'Explorer'}
-                    />
+                    <Greeting greeting={greeting} username={displayName || user?.email?.split('@')[0] || 'Explorer'} />
                 </header>
 
-                {/* Mobile: Toggle Sidebar Button */}
                 <div className="lg:hidden flex justify-end">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                        className="bg-gray-800 border-gray-700 text-yellow-400 hover:text-yellow-300"
-                    >
+                    <Button variant="outline" size="sm" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="bg-gray-800 border-gray-700 text-yellow-400 hover:text-yellow-300">
                         {isSidebarOpen ? <><PanelTopClose className="mr-2 h-4 w-4" /> Hide Tools</> : <><PanelTopOpen className="mr-2 h-4 w-4" /> Show Tools</>}
                     </Button>
                 </div>
 
                 <main className="flex-grow flex flex-col lg:flex-row gap-5 h-full">
-                    <aside className={cn(
-                        "w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 overflow-hidden",
-                        isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden"
-                    )}>
+                    <aside className={cn("w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 overflow-hidden", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
-                            <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">
-                                Today
-                            </button>
+                            <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">Today</button>
                             <div className="relative w-full">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                                 <input type="search" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all" />
                             </div>
                         </div>
-                        <Calendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
-                        <Prompt dailyStats={dailyStats} />
+                        
+                        <JournalCalendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
+                        <ReflectivePrompt dailyStats={dailyStats} />
 
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
                             {!user ? (
                                 <div className="text-center">
                                     <h3 className="font-bold text-white mb-1">Journal Entries</h3>
                                     <p className="text-xs text-gray-400 mb-3">Sign in to save securely.</p>
-                                    <Button asChild size="sm" className="w-full bg-yellow-500 text-gray-900 hover:bg-yellow-400 font-bold">
-                                        <Link href="/login">Sign In</Link>
-                                    </Button>
+                                    <Button asChild size="sm" className="w-full bg-yellow-500 text-gray-900 hover:bg-yellow-400 font-bold"><Link href="/login">Sign In</Link></Button>
                                 </div>
                             ) : !isPro ? (
                                 <>
@@ -877,9 +408,7 @@ export default function JournalPage() {
                                     <div className="w-full bg-gray-700 rounded-full h-2 mb-3">
                                         <div className="bg-yellow-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(journalEntryCount / 30) * 100}%` }}></div>
                                     </div>
-                                    <Button asChild size="sm" variant="outline" className="w-full border-yellow-500 text-yellow-400 hover:bg-yellow-500/10">
-                                        <Link href="/landing">Upgrade to Unlimited</Link>
-                                    </Button>
+                                    <Button asChild size="sm" variant="outline" className="w-full border-yellow-500 text-yellow-400 hover:bg-yellow-500/10"><Link href="/landing">Upgrade to Unlimited</Link></Button>
                                 </>
                             ) : (
                                 <div className="flex items-center justify-between">
@@ -894,21 +423,22 @@ export default function JournalPage() {
                     </aside>
 
                     <div {...editorWrapperProps} className="flex-grow min-h-[500px] lg:h-auto">
-                        <JournalEditor
+                        <TextEditor
                             ref={editorRef}
                             entry={entry}
                             onEntryChange={handleEntryChange}
                             dailyStats={dailyStats}
+                            isPro={isPro}
+                            user={user}
                             isPastDate={isPastDate}
                             isFutureDate={isFutureDate}
                             isEditMode={isEditMode}
                             setIsEditMode={setIsEditMode}
                             isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
-                            entryCount={journalEntryCount}
-                            onEntriesClick={() => setIsEntriesListOpen(true)}
                             saveStatus={saveStatus}
                             onNavigate={changeDate}
                             isContentLoading={isContentLoading}
+                            onEntriesClick={() => setIsEntriesListOpen(true)}
                         />
                     </div>
                 </main>

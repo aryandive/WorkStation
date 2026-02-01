@@ -1,85 +1,80 @@
 'use client';
-import { useEffect, useState } from 'react';
-import { cn } from '@/lib/utils';
+import { useState, useEffect } from 'react';
 
-const Ring = ({ percentage, color, value, label, onClick }) => {
-    const [animatedPct, setAnimatedPct] = useState(0);
+const Ring = ({ percentage, color, label, value, onClick }) => {
+    const [animatedPercentage, setAnimatedPercentage] = useState(0);
+
     useEffect(() => {
-        // Simple animation on mount/update
-        const timer = setTimeout(() => setAnimatedPct(Math.min(100, Math.max(0, percentage))), 100);
+        // Animation delay for smooth entrance
+        const timer = setTimeout(() => {
+            setAnimatedPercentage(percentage);
+        }, 300);
         return () => clearTimeout(timer);
     }, [percentage]);
 
     return (
-        <div 
-            onClick={onClick} 
-            className={cn("relative flex flex-col items-center justify-center group", onClick && "cursor-pointer")}
+        <div
+            onClick={onClick}
+            className={`relative w-16 h-16 lg:w-20 lg:h-20 group ${onClick ? 'cursor-pointer' : ''}`}
         >
-            <div className="relative w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 group-hover:scale-105">
-                <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 36 36">
-                    {/* Background Path */}
-                    <path
-                        className="text-gray-800"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                    />
-                    {/* Value Path */}
-                    <path
-                        className="transition-all duration-1000 ease-out"
-                        style={{ stroke: color }}
-                        strokeDasharray={`${animatedPct}, 100`}
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                    />
-                </svg>
-                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className={cn("text-sm md:text-base font-bold text-white transition-colors", onClick && "group-hover:text-yellow-400")}>
-                        {value}
-                    </span>
-                </div>
+            {/* Label INSIDE the ring (Restored Design) */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
+                <span className={`font-bold text-base lg:text-lg transition-all duration-500 ${onClick ? 'group-hover:scale-110 group-hover:text-yellow-400' : ''}`}>
+                    {value}
+                </span>
+                <span className="text-[10px] lg:text-xs -mt-1 opacity-80 uppercase tracking-tight">
+                    {label}
+                </span>
             </div>
-            <span className="mt-2 text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wide">{label}</span>
+            
+            {/* SVG Circles (Restored Smoother Implementation) */}
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
+                {/* Background Track */}
+                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3"></circle>
+                {/* Value Progress */}
+                <circle
+                    cx="18"
+                    cy="18"
+                    r="15.9155"
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="3"
+                    strokeDasharray={`${animatedPercentage}, 100`}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000 ease-out"
+                ></circle>
+            </svg>
         </div>
     );
 };
 
 export default function ActivityRings({ stats, onEntriesClick }) {
-    // stats prop structure: { entries: { percentage, value }, tasks: { percentage, value }, sessions: { percentage, value } }
     if (!stats) return null;
 
     return (
-        <div className="bg-black/30 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4 flex flex-col gap-4">
-             {/* --- TOTAL GOAL / DASHBOARD STYLE HEADER --- */}
-             <div className="flex items-center justify-between border-b border-gray-700/50 pb-2 mb-1">
-                <div>
-                    <h2 className='text-gray-400 text-[10px] uppercase tracking-widest'>Today&apos;s Focus</h2>
-                    <h1 className='text-lg font-bold text-white'>Daily Goals</h1>
-                </div>
-             </div>
-
-            <div className="flex items-center justify-around px-2">
-                <Ring 
-                    percentage={stats.entries?.percentage || 0} 
-                    value={stats.entries?.value || '0/0'} 
-                    label="Entries" 
-                    color="#38B2AC" 
-                    onClick={onEntriesClick} 
+        <div className="flex-shrink-0 flex items-center gap-4 mb-4 p-3 bg-black/30 rounded-xl backdrop-blur-sm border border-gray-700/50 overflow-x-auto">
+            <h3 className="font-bold text-gray-400 hidden sm:block text-sm uppercase tracking-wide whitespace-nowrap">
+                Daily Snapshot:
+            </h3>
+            <div className="flex items-center gap-6 w-full justify-around sm:justify-start">
+                <Ring
+                    percentage={stats.entries?.percentage || 0}
+                    value={stats.entries?.value || '0/0'}
+                    label="Entries"
+                    color="#38B2AC" // Teal
+                    onClick={onEntriesClick}
                 />
-                <Ring 
-                    percentage={stats.tasks?.percentage || 0} 
-                    value={stats.tasks?.value || '0/0'} 
-                    label="Tasks" 
-                    color="#48BB78" 
+                <Ring
+                    percentage={stats.tasks?.percentage || 0}
+                    value={stats.tasks?.value || '0/0'}
+                    label="Tasks"
+                    color="#48BB78" // Green
                 />
-                <Ring 
-                    percentage={stats.sessions?.percentage || 0} 
-                    value={stats.sessions?.value || '0/0'} 
-                    label="Focus" 
-                    color="#FBBF24" 
+                <Ring
+                    percentage={stats.sessions?.percentage || 0}
+                    value={stats.sessions?.value || '0/0'}
+                    label="Focus"
+                    color="#FBBF24" // Yellow
                 />
             </div>
         </div>

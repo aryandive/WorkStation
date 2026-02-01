@@ -17,6 +17,7 @@ import SignUpModal from '@/components/auth/SignUpModal';
 import { cn } from '@/lib/utils';
 import { Eye, EyeOff } from 'lucide-react'; // Replaced Play/Pause with Eye/EyeOff
 import { Button } from '@/components/ui/button';
+import TestingWarning from '@/components/TestingWarning';
 
 export default function PomodoroTimerPage() {
   const [isTodoOpen, setIsTodoOpen] = useState(false);
@@ -87,6 +88,10 @@ export default function PomodoroTimerPage() {
             <div>
               <h2 className='text-gray-300 text-sm tracking-widest'>TODAY&apos;S FOCUS</h2>
               <h1 className='text-2xl font-bold text-white'>Focus Goal</h1>
+              {/* --- INSERT THE NEW COMPONENT HERE --- */}
+            <div className="mt-1">
+                <TestingWarning />
+            </div>
             </div>
             
             {/* Zen Mode Toggle (Replaces Play/Pause) */}
