@@ -1,6 +1,5 @@
 'use client';
 import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { saveLocalJournal, getLocalJournals } from '@/lib/localJournal';
 import { createClient } from '@/utils/supabase/client';
@@ -228,10 +227,34 @@ const JournalEditor = forwardRef(function JournalEditor({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [entry.date]);
 
+    // Sync title when entry.title updates from server (e.g. after refresh for today — entry.date doesn't change so the effect above doesn't run)
     useEffect(() => {
+        setLocalTitle(entry.title || '');
+    }, [entry.title]);
+
+    useEffect(() => {
+        // Only run if we are done loading and actually have an entry to show
         if (!isContentLoading && editorRef.current && entry.content) {
-            if (editorRef.current.innerHTML.trim() === '') {
-                editorRef.current.innerHTML = entry.content;
+            
+            const currentHTML = editorRef.current.innerHTML;
+            const currentText = editorRef.current.innerText.trim();
+
+            // 1. Is the editor visually empty? (No visible text)
+            const hasNoText = currentText.length === 0;
+
+            // 2. Is the content just HTML tags with no real words? 
+            // This catches the "<div><br></div>" ghost tags your database saved.
+            const hasNoRealContent = currentHTML.replace(/<[^>]*>/g, '').trim().length === 0;
+
+            // 3. Safety: Don't overwrite if there is an image (we don't want to delete it)
+            const hasNoImages = !currentHTML.includes('<img');
+
+            // FINAL CHECK: If it looks empty, overwrite it with the saved data.
+            if ((hasNoText || hasNoRealContent) && hasNoImages) {
+                // Prevent unnecessary updates if it's already matching
+                if (currentHTML !== entry.content) {
+                    editorRef.current.innerHTML = entry.content;
+                }
             }
         }
     }, [isContentLoading, entry.content]);
@@ -473,8 +496,12 @@ export default function JournalPage() {
             if (error) { console.error("Error fetching journal entries:", error); setAllEntries({}); }
             else {
                 const entriesMap = data.reduce((acc, entry) => {
-                    const date = new Date(entry.date.includes('T') ? entry.date : entry.date + 'T12:00:00Z');
-                    acc[getDateKey(date)] = entry;
+                    // Parse date as calendar date only (YYYY-MM-DD) to avoid timezone shift.
+                    // Supabase may return "2026-02-01" or "2026-02-01T00:00:00.000Z"; UTC midnight would shift day in some timezones.
+                    const dateStr = entry.date.includes('T') ? entry.date.split('T')[0] : entry.date;
+                    const [y, m, d] = dateStr.split('-').map(Number);
+                    const dateKey = `${y}-${m}-${d}`;
+                    acc[dateKey] = entry;
                     return acc;
                 }, {});
                 setAllEntries(entriesMap);
@@ -489,7 +516,8 @@ export default function JournalPage() {
         // Only fetch from server if Pro. 
         if (!user || !isPro) return null;
         const [y, m, d] = dateKey.split('-').map(Number);
-        const isoDate = new Date(y, m - 1, d).toISOString().split('T')[0];
+        // Build YYYY-MM-DD from parts (no Date/toISOString) so query matches stored calendar date in all timezones.
+        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
         const { data, error } = await supabase.from('journal_entries').select('content').eq('user_id', user.id).eq('date', isoDate).single();
         if (error) return null;
@@ -576,7 +604,8 @@ export default function JournalPage() {
             if (Object.keys(local).length > 0) {
                 const formatted = Object.entries(local).map(([k, v]) => {
                     const [y, m, d] = k.split('-').map(Number);
-                    return { user_id: user.id, date: new Date(y, m - 1, d).toISOString().split('T')[0], title: v.title, content: v.content };
+                    const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    return { user_id: user.id, date: isoDate, title: v.title, content: v.content };
                 });
                 supabase.from('journal_entries').upsert(formatted, { onConflict: 'user_id, date' })
                     .then(() => { localStorage.removeItem('ws_journal_entries'); fetchJournalEntries(); });
@@ -677,9 +706,14 @@ export default function JournalPage() {
                 });
                 setEntry(prev => ({...prev, id: null}));
             } else if (!isEmpty) {
+                const y = selectedDate.getFullYear();
+                const m = selectedDate.getMonth() + 1;
+                const d = selectedDate.getDate();
+                // Build YYYY-MM-DD from local date parts (no toISOString) so we store the user's calendar date in all timezones.
+                const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const payload = {
                     user_id: user.id,
-                    date: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).toISOString().split('T')[0],
+                    date: isoDate,
                     title: newEntry.title,
                     content: newEntry.content,
                 };
@@ -770,14 +804,15 @@ export default function JournalPage() {
 
                 <header className="flex-shrink-0 h-48 lg:h-56 relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
                     <div className="absolute inset-0 w-full h-full z-0">
-                         <Image 
-                            src="/video123.webm" 
-                            alt="Immersive Background" 
-                            fill 
-                            className="object-cover" 
-                            priority
-                            unoptimized 
-                         />
+                        <video
+                            src="/video123.webm"
+                            autoPlay
+                            loop
+                            muted
+                            playsInline
+                            className="absolute inset-0 w-full h-full object-cover"
+                            aria-hidden
+                        />
                     </div>
                     <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-900/40 to-transparent z-10"></div>
                     <div className="absolute inset-0 bg-black/20 z-10"></div>
