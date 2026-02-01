@@ -192,7 +192,7 @@ function SceneButton({ scene, isActive, onClick }) {
         }
         return (
             <Image 
-                src={scene.thumbnail || '/placeholder.jpg'} 
+                src={scene.thumbnail || '/placeholder.webp'} 
                 alt={scene.name || 'Scene'} 
                 fill 
                 sizes="(max-width: 768px) 33vw, 20vw" 

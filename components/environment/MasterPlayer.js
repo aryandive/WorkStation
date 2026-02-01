@@ -99,7 +99,7 @@ export default function MasterPlayer() {
                 >
                      <Image
                         // SAFETY LAYER 2: Try the path, fallback to local placeholder if empty
-                        src={activeScene.thumbnail || activeScene.path || '/placeholder.jpg'}
+                        src={activeScene.thumbnail || activeScene.path || '/placeholder.webp'}
                         alt="Background Ambience"
                         fill
                         priority
@@ -109,8 +109,8 @@ export default function MasterPlayer() {
                         draggable={false}
                         // SAFETY LAYER 3: If Supabase load fails, force switch to local fallback
                         onError={(e) => {
-                            e.target.src = '/placeholder.jpg'; // Ensure you have a public/placeholder.jpg
-                            e.target.srcset = '/placeholder.jpg';
+                            e.target.src = '/placeholder.webp'; // Ensure you have a public/placeholder.webp
+                            e.target.srcset = '/placeholder.webp';
                         }}
                     />
                     {/* Dark overlay for text readability */}

@@ -84,7 +84,7 @@ export default function PomodoroTimerPage() {
         >
           {/* Top Left: Logo, Goal & Zen Toggle */}
           <div className={cn("flex flex-col gap-4", fadeClass)}>
-            <Image width={50} height={50} src="/logo.jpg" alt="Work Station Logo" className="rounded-md" />
+            <Image width={50} height={50} src="/logo.webp" alt="Work Station Logo" className="rounded-md" />
             <div>
               <h2 className='text-gray-300 text-sm tracking-widest'>TODAY&apos;S FOCUS</h2>
               <h1 className='text-2xl font-bold text-white'>Focus Goal</h1>
@@ -155,7 +155,7 @@ export default function PomodoroTimerPage() {
           {/* Bottom Right: Logo/Menu */}
           <div className={cn("absolute bottom-6 right-6", fadeClass)}>
             <div className="relative group inline-block">
-              <Image src="/logo.jpg" alt="Logo" width={50} height={50} className="cursor-pointer rounded-md" />
+              <Image src="/logo.webp" alt="Logo" width={50} height={50} className="cursor-pointer rounded-md" />
               <div className="absolute bottom-full right-0 mb-2 w-48 bg-gray-800 text-white text-sm rounded-lg shadow-lg p-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-400 delay-200 ease-out transform origin-bottom-right z-10">
                 <div className="font-bold mb-1">Work Station</div>
                 <div className="mb-1">
