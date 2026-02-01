@@ -1,55 +1,86 @@
-// for gemini copy/components/journal/ActivityRings.js
 'use client';
-import React from 'react';
+import { useEffect, useState } from 'react';
+import { cn } from '@/lib/utils';
 
-const Ring = ({ color, percentage, label }) => {
-    const radius = 30;
-    const circumference = 2 * Math.PI * radius;
-    const offset = circumference - (percentage / 100) * circumference;
+const Ring = ({ percentage, color, value, label, onClick }) => {
+    const [animatedPct, setAnimatedPct] = useState(0);
+    useEffect(() => {
+        // Simple animation on mount/update
+        const timer = setTimeout(() => setAnimatedPct(Math.min(100, Math.max(0, percentage))), 100);
+        return () => clearTimeout(timer);
+    }, [percentage]);
 
     return (
-        <div className="flex flex-col items-center">
-            <svg className="w-20 h-20 transform -rotate-90">
-                <circle
-                    className="text-gray-700"
-                    strokeWidth="5"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r={radius}
-                    cx="40"
-                    cy="40"
-                />
-                <circle
-                    className={color}
-                    strokeWidth="5"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={offset}
-                    strokeLinecap="round"
-                    stroke="currentColor"
-                    fill="transparent"
-                    r={radius}
-                    cx="40"
-                    cy="40"
-                />
-            </svg>
-            <span className="text-xs text-gray-400 mt-1">{label}</span>
+        <div 
+            onClick={onClick} 
+            className={cn("relative flex flex-col items-center justify-center group", onClick && "cursor-pointer")}
+        >
+            <div className="relative w-16 h-16 md:w-20 md:h-20 transition-transform duration-300 group-hover:scale-105">
+                <svg className="w-full h-full -rotate-90 transform" viewBox="0 0 36 36">
+                    {/* Background Path */}
+                    <path
+                        className="text-gray-800"
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="3"
+                    />
+                    {/* Value Path */}
+                    <path
+                        className="transition-all duration-1000 ease-out"
+                        style={{ stroke: color }}
+                        strokeDasharray={`${animatedPct}, 100`}
+                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
+                        fill="none"
+                        strokeWidth="3"
+                        strokeLinecap="round"
+                    />
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className={cn("text-sm md:text-base font-bold text-white transition-colors", onClick && "group-hover:text-yellow-400")}>
+                        {value}
+                    </span>
+                </div>
+            </div>
+            <span className="mt-2 text-[10px] md:text-xs text-gray-400 font-bold uppercase tracking-wide">{label}</span>
         </div>
     );
 };
 
-export default function ActivityRings() {
-    // Replace with real data later
-    const focusData = { percentage: 75, label: "120/180 min" };
-    const tasksData = { percentage: 60, label: "3/5 tasks" };
-    const pomodoroData = { percentage: 80, label: "4/5 sessions" };
+export default function ActivityRings({ stats, onEntriesClick }) {
+    // stats prop structure: { entries: { percentage, value }, tasks: { percentage, value }, sessions: { percentage, value } }
+    if (!stats) return null;
 
     return (
-        <div className="bg-black/20 rounded-lg p-4 mb-4">
-            <h3 className="text-lg font-semibold mb-3 text-white">Today&apos;s Focus</h3>
-            <div className="flex justify-around">
-                <Ring color="text-blue-400" percentage={focusData.percentage} label={focusData.label} />
-                <Ring color="text-green-400" percentage={tasksData.percentage} label={tasksData.label} />
-                <Ring color="text-yellow-400" percentage={pomodoroData.percentage} label={pomodoroData.label} />
+        <div className="bg-black/30 backdrop-blur-sm border border-gray-700/50 rounded-xl p-4 flex flex-col gap-4">
+             {/* --- TOTAL GOAL / DASHBOARD STYLE HEADER --- */}
+             <div className="flex items-center justify-between border-b border-gray-700/50 pb-2 mb-1">
+                <div>
+                    <h2 className='text-gray-400 text-[10px] uppercase tracking-widest'>Today&apos;s Focus</h2>
+                    <h1 className='text-lg font-bold text-white'>Daily Goals</h1>
+                </div>
+             </div>
+
+            <div className="flex items-center justify-around px-2">
+                <Ring 
+                    percentage={stats.entries?.percentage || 0} 
+                    value={stats.entries?.value || '0/0'} 
+                    label="Entries" 
+                    color="#38B2AC" 
+                    onClick={onEntriesClick} 
+                />
+                <Ring 
+                    percentage={stats.tasks?.percentage || 0} 
+                    value={stats.tasks?.value || '0/0'} 
+                    label="Tasks" 
+                    color="#48BB78" 
+                />
+                <Ring 
+                    percentage={stats.sessions?.percentage || 0} 
+                    value={stats.sessions?.value || '0/0'} 
+                    label="Focus" 
+                    color="#FBBF24" 
+                />
             </div>
         </div>
     );
