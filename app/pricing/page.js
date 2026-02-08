@@ -1,32 +1,35 @@
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     CheckCircle2,
-    Zap,
     ShieldCheck,
     Infinity as InfinityIcon,
     Sparkles,
-    ListTodo,
     TrendingDown,
-    ArrowRight
+    ArrowRight,
+    Clock,
+    Server,
+    HeartHandshake,
+    AlertCircle
 } from 'lucide-react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import { useAuth } from '@/context/AuthContext';
-import { PayPalScriptProvider } from '@paypal/react-paypal-js';
+import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import PayPalSubscriptionButton from '@/components/PayPalSubscriptionButton';
 
 // --- CONFIGURATION ---
 const MONTHLY_PLAN_ID = process.env.NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID;
-const YEARLY_PLAN_ID = process.env.NEXT_PUBLIC_PAYPAL_YEARLY_PLAN_ID; // The $29.99 Plan ID
 const CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+const LIFETIME_PRICE = "19.99";
 
-// --- PRICING DATA CONFIGURATION ---
+// --- TIERS DATA ---
 const TIERS = [
     {
         id: 'starter',
@@ -39,7 +42,7 @@ const TIERS = [
             'Pomodoro Timer',
             'Local Browser Storage',
             '30 Journal Entry Limit',
-            'Limited Ambiance Sounds'
+            'Limited Ambiance Sound'
         ],
         cta: 'Try for Free',
         href: '/signup',
@@ -49,10 +52,12 @@ const TIERS = [
     {
         id: 'monthly',
         name: 'Focus Pro Monthly',
-        priceDisplay: '$7.99',
+        priceDisplay: '$4.99',
         priceSuffix: '/ mo',
         subtext: 'Billed monthly. Cancel anytime.',
         description: 'Unlock the full productivity suite.',
+        // Visual Trap: Show the yearly cost to discourage renting
+        yearlyAnchor: '$59.88 / yr', 
         features: [
             'Unlimited Cloud Sync (All Devices)',
             'Unlimited Journal Entries',
@@ -67,25 +72,24 @@ const TIERS = [
         variant: 'standard',
     },
     {
-        id: 'early-bird',
-        name: 'Focus Pro (Early Bird)',
-        // Custom logic for price display handled in component
+        id: 'lifetime',
+        name: 'The Believer',
         isSpecialPrice: true,
-        priceSuffix: '/ mo',
-        subtext: 'Billed $29.99/yr',
-        description: 'Join the Founder’s Club. Lock in this price forever.',
+        priceDisplay: '$19.99',
+        priceSuffix: ' once',
+        subtext: 'One-time payment. Own it forever.',
+        description: 'Join the Founder’s Club. Never pay again.',
         features: [
             'Everything in Monthly',
-            'Founding Member Badge',
+            'Founding Member Badge 🏅',
             'Priority "Direct-to-Dev" Support',
             'Early Access to New Features',
             'Locked-in Price Forever',
         ],
-        cta: 'Claim 50% Off Lifetime',
+        cta: 'Claim Lifetime Access',
         href: '#',
-        planId: YEARLY_PLAN_ID,
         variant: 'hero',
-        badge: '🔥 421 / 500 spots claimed',
+        badge: '🔥 17 / 25 Spots Left (Server Fund)',
     },
 ];
 
@@ -94,7 +98,10 @@ export default function PricingPage() {
     const router = useRouter();
     const { user } = useAuth();
 
-    // PayPal Initial Options - Memoized to prevent script reload issues
+    // Scarcity Logic: Static start to feel real
+    const [spotsLeft, setSpotsLeft] = useState(17);
+
+    // PayPal Options
     const initialOptions = useMemo(() => ({
         "client-id": CLIENT_ID,
         currency: "USD",
@@ -102,9 +109,14 @@ export default function PricingPage() {
         vault: true,
     }), []);
 
-    const handleApprove = async (data) => {
+    const handleApproveSubscription = async (data) => {
         console.log("Subscription successful:", data);
-        window.location.href = '/journal?upgraded=true';
+        window.location.href = '/journal?upgraded=true&type=subscription';
+    };
+
+    const handleApproveLifetime = async (data, actions) => {
+        console.log("Lifetime payment successful:", data);
+        window.location.href = '/journal?upgraded=true&type=lifetime';
     };
 
     return (
@@ -115,26 +127,31 @@ export default function PricingPage() {
                 <main className="flex-grow">
                     {/* --- HERO SECTION --- */}
                     <div className="relative py-20 px-6 overflow-hidden">
+                        {/* Background Glow */}
                         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-full max-w-4xl pointer-events-none">
                             <div className="absolute top-10 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-yellow-500/10 blur-[120px] rounded-full mix-blend-screen opacity-50" />
                         </div>
 
                         <div className="relative z-10 max-w-5xl mx-auto text-center">
-                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-yellow-950/30 border border-yellow-500/20 text-yellow-400 text-xs font-bold tracking-wider uppercase mb-8 shadow-lg shadow-yellow-900/5 backdrop-blur-sm">
-                                <Sparkles className="w-3.5 h-3.5 fill-yellow-400" />
-                                <span>Official v2.0 Launch Offer</span>
+                            {/* Server Fund Banner */}
+                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-yellow-950/40 border border-yellow-500/30 text-yellow-400 text-xs font-bold tracking-wider uppercase mb-8 shadow-lg backdrop-blur-md">
+                                <Server className="w-3.5 h-3.5" />
+                                <span>The Server Fund Project</span>
                             </div>
 
-                            <h1 className="text-5xl md:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6 text-white">
-                                Invest in your <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-amber-500">Focus</span>.
+                            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-white leading-tight">
+                                Invest in your Focus.<br/>
+                                <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-amber-500">
+                                    Not a Subscription.
+                                </span>
                             </h1>
 
                             <p className="text-xl text-[#A0AEC0] max-w-2xl mx-auto leading-relaxed mb-4">
-                                Stop renting your productivity. Join the <span className="text-gray-200 font-semibold">Founder&apos;s Club</span> and lock in our lowest rate forever.
+                                Stop renting your tools. Help a student developer keep the lights on and get <span className="text-white font-bold">Lifetime Access</span> for the price of a pizza.
                             </p>
 
-                            <p className="text-sm text-gray-500 font-medium mb-16">
-                                30-day money-back guarantee • Cancel anytime
+                            <p className="text-sm text-gray-500 font-medium mb-16 flex justify-center items-center gap-2">
+                                <ShieldCheck className="w-4 h-4" /> 30-day money-back guarantee
                             </p>
                         </div>
 
@@ -145,21 +162,26 @@ export default function PricingPage() {
                             </div>
                         )}
 
-                        {/* --- PRICING CARDS GRID --- */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-stretch max-w-6xl mx-auto relative z-20">
+                        {/* --- PRICING CARDS --- */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start max-w-6xl mx-auto relative z-20">
                             {TIERS.map((tier) => (
                                 <PricingCard
                                     key={tier.id}
                                     tier={tier}
                                     user={user}
                                     router={router}
-                                    onApprove={handleApprove}
+                                    onApproveSubscription={handleApproveSubscription}
+                                    onApproveLifetime={handleApproveLifetime}
+                                    spotsLeft={spotsLeft}
                                 />
                             ))}
                         </div>
                     </div>
 
-                    {/* --- VALUE BREAKDOWN / COMPARISON --- */}
+                    {/* --- DEVELOPER NOTE --- */}
+                    <DeveloperNoteSection />
+
+                    {/* --- VALUE BREAKDOWN --- */}
                     <ValueBreakdownSection />
                 </main>
 
@@ -169,12 +191,12 @@ export default function PricingPage() {
     );
 }
 
-// --- SUB-COMPONENT: Pricing Card ---
-function PricingCard({ tier, user, router, onApprove }) {
+// --- COMPONENT: Pricing Card ---
+function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifetime, spotsLeft }) {
     const isHero = tier.variant === 'hero';
     const isFree = tier.planId === 'free';
+    const isLifetime = tier.id === 'lifetime';
 
-    // Logic Fix: Redirect logged-in users to app instead of signup
     const handleFreeClick = (e) => {
         if (isFree && user) {
             e.preventDefault();
@@ -186,15 +208,17 @@ function PricingCard({ tier, user, router, onApprove }) {
         <div className={cn(
             'relative flex flex-col p-8 rounded-2xl border transition-all duration-300 h-full',
             'bg-gray-800/40 backdrop-blur-sm',
-            // Removed md:scale-105 to fix overlap issue
             isHero
-                ? 'border-yellow-400/50 shadow-[0_0_30px_-5px_rgba(250,204,21,0.2)] bg-gray-800/80 ring-1 ring-yellow-400/20'
-                : 'border-gray-700 hover:border-gray-600'
+                // CHANGED: Removed 'scale-105' and 'shadow-[...]'
+                // Kept 'border-yellow-400' and 'ring-1' (The Golden Ring)
+                ? 'border-yellow-400/50 bg-gray-800/90 ring-1 ring-yellow-400/30 z-10'
+               : 'border-gray-700 hover:border-gray-600 z-0'
         )}>
             {/* Scarcity Badge for Hero */}
-            {isHero && tier.badge && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-500 to-amber-500 text-gray-900 px-3 py-1 text-[11px] font-bold rounded-full shadow-lg whitespace-nowrap uppercase tracking-wider flex items-center gap-1.5 z-20">
-                    {tier.badge}
+            {isHero && (
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-gradient-to-r from-yellow-500 to-amber-600 text-black px-4 py-1.5 text-xs font-black rounded-full shadow-lg whitespace-nowrap uppercase tracking-wider flex items-center gap-1.5 z-20 animate-pulse">
+                    <Clock className="w-3.5 h-3.5" />
+                    {spotsLeft} Spots Left
                 </div>
             )}
 
@@ -210,24 +234,10 @@ function PricingCard({ tier, user, router, onApprove }) {
 
             {/* Price Display */}
             <div className="mb-6 text-center">
-                <div className="flex justify-center items-center gap-2">
-                    {tier.isSpecialPrice ? (
-                        <>
-                            {/* Strikethrough Price (Red) */}
-                            <span className="text-2xl font-bold text-red-400 line-through decoration-2 decoration-red-400/50 opacity-80">
-                                $4.99
-                            </span>
-                            {/* Actual Price (Green) */}
-                            <span className="text-4xl md:text-5xl font-extrabold tracking-tight text-green-400">
-                                $2.49
-                            </span>
-                        </>
-                    ) : (
-                        <span className={cn("text-4xl md:text-5xl font-extrabold tracking-tight", isHero ? "text-white" : "text-gray-200")}>
-                            {tier.priceDisplay}
-                        </span>
-                    )}
-
+                <div className="flex justify-center items-center gap-2 flex-wrap">
+                    <span className={cn("text-4xl md:text-5xl font-extrabold tracking-tight", isHero ? "text-yellow-400" : "text-gray-200")}>
+                        {tier.priceDisplay}
+                    </span>
                     {tier.priceSuffix && (
                         <span className="text-lg font-medium text-gray-500 self-end mb-2">
                             {tier.priceSuffix}
@@ -235,34 +245,34 @@ function PricingCard({ tier, user, router, onApprove }) {
                     )}
                 </div>
 
-                {/* Subtext */}
-                {tier.subtext && (
-                    <div className="mt-2 text-sm text-gray-400 font-medium">
-                        {tier.subtext}
+                {/* VISUAL TRAP: Show Yearly Cost on Monthly Plan */}
+                {tier.yearlyAnchor && (
+                    <div className="mt-1 text-sm font-medium text-red-400/80 line-through decoration-red-500/50">
+                        ({tier.yearlyAnchor})
                     </div>
                 )}
 
-                {/* STAMPS (New Request) */}
-                {isHero && (
-                    <div className="mt-4 flex flex-col items-center gap-2">
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-green-500/10 border border-green-500/30 rounded text-[11px] font-bold text-green-400 uppercase tracking-wide">
-                            <TrendingDown className="w-3 h-3" />
-                            Save ~50% vs Standard
-                        </div>
-                        <div className="inline-flex items-center gap-1.5 px-2 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded text-[11px] font-bold text-yellow-400 uppercase tracking-wide">
-                            <TrendingDown className="w-3 h-3" />
-                            Save 68.72% vs Monthly
-                        </div>
+                {/* Lifetime Suffix */}
+                {isLifetime && (
+                    <div className="mt-1 text-sm font-bold text-yellow-500 uppercase tracking-widest">
+                        Pay Once • Own Forever
+                    </div>
+                )}
+
+                {/* Subtext */}
+                {!isLifetime && tier.subtext && (
+                    <div className="mt-2 text-sm text-gray-400 font-medium">
+                        {tier.subtext}
                     </div>
                 )}
             </div>
 
             {/* Features */}
             <ul className="space-y-4 mb-8 flex-grow">
-                {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-3">
+                {tier.features.map((feature, i) => (
+                    <li key={i} className="flex items-start gap-3">
                         <CheckCircle2 className={cn("h-5 w-5 flex-shrink-0 mt-0.5", isHero ? "text-yellow-400" : "text-green-400")} />
-                        <span className="text-gray-300 text-sm leading-tight">{feature}</span>
+                        <span className="text-gray-300 text-sm leading-tight text-left">{feature}</span>
                     </li>
                 ))}
             </ul>
@@ -271,12 +281,11 @@ function PricingCard({ tier, user, router, onApprove }) {
             <div className="mt-auto pt-4">
                 {isFree ? (
                     <Button
-                        asChild={!user} // Only asChild if NOT logged in, otherwise we use onClick
+                        asChild={!user}
                         onClick={handleFreeClick}
                         className="w-full h-12 text-base font-bold bg-gray-700 hover:bg-gray-600 text-white shadow-lg cursor-pointer"
                     >
                         {user ? (
-                            // Logic Fix: Button text changes if logged in
                             <span className="flex items-center gap-2">
                                 Go to Workstation <ArrowRight className="w-4 h-4" />
                             </span>
@@ -296,117 +305,154 @@ function PricingCard({ tier, user, router, onApprove }) {
                                         : "bg-gray-700 hover:bg-gray-600 text-white"
                                 )}
                             >
-                                {isHero ? "Claim Discount (Login)" : "Login to Subscribe"}
+                                {isHero ? "Login to Support" : "Login to Subscribe"}
                             </Button>
                         ) : (
-                            <div className={cn("rounded-lg overflow-hidden", isHero && "ring-2 ring-yellow-400/50 ring-offset-2 ring-offset-[#1A202C]")}>
-                                <PayPalSubscriptionButton
-                                    planId={tier.planId}
-                                    user={user}
-                                    onApprove={onApprove}
-                                    styleLabel={isHero ? "checkout" : "rect"}
-                                />
+                            <div className={cn("rounded-lg overflow-hidden relative", isHero && "ring-2 ring-yellow-400/50 ring-offset-2 ring-offset-[#1A202C]")}>
+                                {isLifetime ? (
+                                    <PayPalButtons
+                                        style={{ shape: 'rect', label: 'checkout', height: 48 }}
+                                        createOrder={(data, actions) => {
+                                            return actions.order.create({
+                                                purchase_units: [{
+                                                    description: "WorkStation Lifetime Access (Server Fund)",
+                                                    amount: { value: "19.99" } // Assuming LIFETIME_PRICE const is available in scope
+                                                }]
+                                            });
+                                        }}
+                                        onApprove={(data, actions) => {
+                                            return actions.order.capture().then((details) => {
+                                                onApproveLifetime(details, actions);
+                                            });
+                                        }}
+                                    />
+                                ) : (
+                                    <PayPalSubscriptionButton
+                                        planId={tier.planId}
+                                        user={user}
+                                        onApprove={onApproveSubscription}
+                                        styleLabel="rect"
+                                    />
+                                )}
                             </div>
                         )}
                     </div>
                 )}
             </div>
+            
+            {/* Urgency Footer for Lifetime */}
+            {isHero && (
+                <p className="text-[10px] text-center text-yellow-500/80 mt-3 font-medium">
+                    *Proceeds go directly to server costs.
+                </p>
+            )}
         </div>
     );
 }
 
+// --- COMPONENT: Developer Note (Trust Builder) ---
+function DeveloperNoteSection() {
+    return (
+        <section className="py-16 px-6">
+            <div className="max-w-3xl mx-auto bg-[#1A202C] border border-gray-700 rounded-2xl p-8 relative overflow-hidden shadow-2xl">
+                {/* Decorative Quote Mark */}
+                <div className="absolute top-4 left-6 text-7xl text-gray-800 font-serif opacity-50">“</div>
+                
+                <div className="relative z-10">
+                    <div className="flex items-center gap-4 mb-6">
+                         {/* Avatar / Placeholder */}
+                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-yellow-400 to-amber-600 flex items-center justify-center text-gray-900 font-bold text-xl shadow-lg">
+                            AD
+                        </div>
+                        <div>
+                            <h4 className="text-white font-bold text-lg">A Note from the Developer</h4>
+                            <p className="text-gray-400 text-sm">Aryan Dive, ECE Student & Solo Founder</p>
+                        </div>
+                    </div>
+                    
+                    <div className="space-y-4 text-gray-300 leading-relaxed">
+                        <p>
+                            Hi, I&apos;m Aryan. I&apos;m not a big tech company; I&apos;m an ECE student building this from my dorm room because I refused to pay another monthly subscription for a simple productivity tool.
+                        </p>
+                        <p>
+                            <span className="text-yellow-400 font-semibold">Why the limited Lifetime Deal?</span> It&apos;s not a gimmick—it&apos;s a necessity. 
+                            I&apos;ve calculated the exact cost to keep WorkStation fast, secure, and ad-free, covering everything from <span className="text-white font-medium">VPS hosting and Apple Developer fees to database backups</span>.
+                        </p>
+                        <p>
+                            Instead of taking venture capital, I&apos;m crowdfunding these costs directly from you. 
+                            The revenue from these 25 spots goes <span className="text-white font-medium">100% into infrastructure</span>, ensuring the app survives. You get a tool forever, I get to keep the lights on.
+                        </p>
+                        <p>
+                            And because I want you to trust this 
+                            indie project, I offer a <span className="text-yellow-400 font-semibold">personal 14-day money-back guarantee</span>. 
+                            If it doesn&apos;t help you, I&apos;ll refund you myself—no bots, just me.
+                        </p>
+                    </div>
 
-// --- SUB-COMPONENT: Value Breakdown Section ---
+                    <div className="mt-8 flex items-center gap-2 text-sm text-gray-500 font-medium italic">
+                        <HeartHandshake className="w-4 h-4 text-red-400" />
+                        Thank you for supporting independent software.
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
+}
+
+// --- COMPONENT: Value Breakdown (The No-Brainer Logic) ---
 function ValueBreakdownSection() {
     return (
         <section className="py-20 bg-black/20 border-t border-gray-800">
             <div className="max-w-4xl mx-auto px-6">
-                <h2 className="text-3xl font-bold text-center mb-12 text-white">Why the &ldquo;Early Bird&ldquo; is a No-Brainer</h2>
+                <h2 className="text-3xl font-bold text-center mb-12 text-white">Why &quot;The Believer&quot; Deal is a No-Brainer</h2>
 
-                <div className="grid md:grid-cols-2 gap-12 items-center">
-                    {/* Visual Comparison (Updated to 1 Year) */}
-                    {/* Visual Comparison */}
-                    <div className="bg-gray-800/50 rounded-xl p-6 border border-gray-700">
-                        <h3 className="text-lg font-semibold text-gray-300 mb-8 uppercase tracking-wider text-center">Cost Over 1 Year</h3>
-
-                        {/* Monthly Path (The Anchor) */}
-                        <div className="mb-8 relative group">
-                            <div className="flex justify-between text-sm mb-2 text-gray-400 font-medium">
-                                <span>Monthly ($7.99/mo)</span>
-                                <span>~$96.00</span>
+                <div className="grid md:grid-cols-2 gap-8">
+                    {/* Math Card */}
+                    <div className="bg-gray-800/50 rounded-xl p-8 border border-gray-700 flex flex-col justify-center">
+                        <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                             <TrendingDown className="text-green-400" /> The Cold Hard Math
+                        </h3>
+                        
+                        <div className="space-y-6">
+                            <div className="flex justify-between items-center p-4 bg-gray-900/50 rounded-lg">
+                                <span className="text-gray-400">1 Year of Monthly ($4.99)</span>
+                                <span className="text-red-400 line-through font-semibold">$59.88</span>
                             </div>
-                            <div className="h-4 bg-gray-700 rounded-full overflow-hidden">
-                                <div className="h-full bg-gray-500 w-full"></div>
-                            </div>
-                        </div>
-
-                        {/* Standard Annual */}
-                        <div className="mb-8 relative group">
-                            <div className="flex justify-between items-center text-sm mb-2">
-                                <span className="text-gray-400">Standard Yearly ($59.99/yr)</span>
-
-                                {/* Standard Badge: Aligned Right (Above Bar) */}
-                                <div className="bg-[#10B981]/10 border border-[#10B981]/30 text-[#10B981] text-[11px] font-bold px-2 py-0.5 rounded shadow-sm">
-                                    Save $36
-                                </div>
-                            </div>
-                            <div className="relative h-4 bg-gray-700 rounded-full">
-                                <div className="h-full bg-blue-500/40 w-[62%] rounded-l-full"></div>
+                            
+                            <div className="flex justify-between items-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
+                                <span className="text-yellow-100 font-medium">Lifetime Access</span>
+                                <span className="text-yellow-400 font-bold text-xl">$19.99</span>
                             </div>
                         </div>
 
-                        {/* Early Bird Path */}
-                        <div className="relative group">
-                            <div className="flex justify-between items-center text-sm mb-2">
-                                <span className="text-white font-bold">Early Bird ($29.99/yr)</span>
-
-                                {/* Glowing Badge: Aligned Right (Above Bar) */}
-                                <div className="bg-[#10B981] text-black text-xs font-bold px-3 py-1 rounded shadow-[0_0_15px_rgba(16,185,129,0.5)] flex items-center gap-1 border border-green-400 transform -rotate-1 origin-bottom-right">
-                                    <Sparkles className="w-3 h-3 fill-black" />
-                                    Save $66
-                                </div>
-                            </div>
-
-                            <div className="relative h-4 bg-gray-700 rounded-full">
-                                <div className="h-full bg-gradient-to-r from-yellow-500 to-amber-500 w-[31%] rounded-l-full animate-pulse"></div>
-                            </div>
-                        </div>
+                        <p className="mt-6 text-gray-400 text-sm text-center">
+                            You break even in just <span className="text-white font-bold">4 months</span>. 
+                            After that, you profit forever.
+                        </p>
                     </div>
 
-                    {/* Feature Highlights */}
+                    {/* Features Card */}
                     <div className="space-y-6">
                         <div className="flex gap-4">
-                            <div className="bg-yellow-400/10 p-3 rounded-lg h-fit">
+                            <div className="bg-yellow-400/10 p-3 rounded-lg h-fit shrink-0">
                                 <InfinityIcon className="w-6 h-6 text-yellow-400" />
                             </div>
                             <div>
-                                <h4 className="font-bold text-white text-lg">Grandfathered Pricing</h4>
+                                <h4 className="font-bold text-white text-lg">Legacy Status</h4>
                                 <p className="text-gray-400 text-sm mt-1">
-                                    Prices will go up as we add features. Your $29.99/year rate is locked in for life as long as you stay subscribed.
+                                    Prices will eventually switch to subscription-only. You will be grandfathered in. You will never see a paywall again.
                                 </p>
                             </div>
                         </div>
 
                         <div className="flex gap-4">
-                            <div className="bg-blue-500/10 p-3 rounded-lg h-fit">
-                                <ShieldCheck className="w-6 h-6 text-blue-400" />
+                            <div className="bg-blue-500/10 p-3 rounded-lg h-fit shrink-0">
+                                <Sparkles className="w-6 h-6 text-blue-400" />
                             </div>
                             <div>
-                                <h4 className="font-bold text-white text-lg">Priority &ldquo;Direct&quot; Support</h4>
+                                <h4 className="font-bold text-white text-lg">Direct Influence</h4>
                                 <p className="text-gray-400 text-sm mt-1">
-                                    Your feedback shapes the roadmap. Early Birds get a direct line to the developer via the Founder&apos;s Discord channel.
-                                </p>
-                            </div>
-                        </div>
-
-                        <div className="flex gap-4">
-                            <div className="bg-green-500/10 p-3 rounded-lg h-fit">
-                                <ListTodo className="w-6 h-6 text-green-400" />
-                            </div>
-                            <div>
-                                <h4 className="font-bold text-white text-lg">Unleash the Productivity Suite</h4>
-                                <p className="text-gray-400 text-sm mt-1">
-                                    Get full access to Premium To-Do (Projects, Sub-tasks), YouTube Integration, and unlimited Journaling immediately.
+                                    &quot;Believers&quot; get a special badge in the database. When you request a feature (like new sounds or integrations), I build it first.
                                 </p>
                             </div>
                         </div>
