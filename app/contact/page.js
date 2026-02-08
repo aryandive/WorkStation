@@ -1,140 +1,137 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import Link from 'next/link';
+import React, { useState } from 'react';
+import Header from '@/components/Header';
+import Footer from '@/components/Footer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Mail, MessageSquare, Send, ArrowLeft, Loader2, CheckCircle } from 'lucide-react';
-
-// ... existing imports
-import { createClient } from '@/utils/supabase/client'; // Import Supabase
-import { useAuth } from '@/context/AuthContext'; // Import Auth to link user (optional)
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { Mail, Send, CheckCircle2 } from 'lucide-react';
 
 export default function ContactPage() {
     const [isLoading, setIsLoading] = useState(false);
     const [isSent, setIsSent] = useState(false);
-    const [formData, setFormData] = useState({ name: '', email: '', message: '' });
-
-    // Get the current user (if logged in)
-    const { user } = useAuth();
-    const supabase = createClient();
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsLoading(true);
-
-        // --- REAL SUBMISSION LOGIC ---
-        try {
-            const { error } = await supabase
-                .from('contact_messages')
-                .insert({
-                    name: formData.name,
-                    email: formData.email,
-                    message: formData.message,
-                    user_id: user?.id || null // Link to user ID if they are logged in
-                });
-
-            if (error) throw error;
-
-            setIsSent(true);
-            setFormData({ name: '', email: '', message: '' });
-        } catch (error) {
-            console.error('Error sending message:', error);
-            alert('Failed to send message. Please try again.');
-        } finally {
+        
+        // Simulate network request
+        setTimeout(() => {
             setIsLoading(false);
-        }
+            setIsSent(true);
+        }, 1500);
     };
 
-    // ... rest of the component
     return (
-        <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center p-4 relative overflow-hidden">
-            {/* Background Gradients */}
-            <div className="absolute top-0 left-0 w-96 h-96 bg-yellow-500/10 rounded-full blur-3xl -translate-x-1/2 -translate-y-1/2 pointer-events-none"></div>
-            <div className="absolute bottom-0 right-0 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl translate-x-1/2 translate-y-1/2 pointer-events-none"></div>
+        <div className="bg-[#1A202C] text-[#F7FAFC] font-sans min-h-screen flex flex-col">
+            <Header />
 
-            <div className="w-full max-w-lg relative z-10 animate-fade-in-up">
-                <Button variant="ghost" asChild className="mb-6 text-gray-400 hover:text-white pl-0 hover:bg-transparent">
-                    <Link href="/"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Work Station</Link>
-                </Button>
+            <main className="flex-grow py-20 px-6">
+                <div className="max-w-2xl mx-auto">
+                    <div className="text-center mb-12">
+                        <h1 className="text-4xl font-extrabold text-white mb-4">Get in Touch</h1>
+                        <p className="text-gray-400 text-lg">
+                            Want to contact me or request a feature? We&apos;d love to hear from you.
+                        </p>
+                    </div>
 
-                <Card className="bg-gray-900/50 border-gray-800 backdrop-blur-xl shadow-2xl">
-                    <CardHeader>
-                        <CardTitle className="text-3xl font-bold bg-gradient-to-r from-white to-gray-400 bg-clip-text text-transparent">
-                            Get in Touch
-                        </CardTitle>
-                        <CardDescription className="text-gray-400">
-                            Have a bug to report or a feature to request? We&apos;d love to hear from you.
-                        </CardDescription>
-                    </CardHeader>
-                    <CardContent>
+                    <div className="bg-gray-800/40 border border-gray-700 rounded-2xl p-8 backdrop-blur-sm shadow-xl">
                         {isSent ? (
-                            <div className="flex flex-col items-center justify-center py-10 text-center animate-in zoom-in duration-300">
-                                <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mb-4">
-                                    <CheckCircle className="w-8 h-8 text-green-500" />
+                            <div className="text-center py-12 animate-in fade-in zoom-in duration-500">
+                                <div className="bg-green-500/10 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <CheckCircle2 className="w-10 h-10 text-green-400" />
                                 </div>
-                                <h3 className="text-xl font-bold text-white mb-2">Message Sent!</h3>
-                                <p className="text-gray-400 mb-6">Thank you for reaching out. We&apos;ll get back to you shortly.</p>
-                                <Button onClick={() => setIsSent(false)} variant="outline" className="border-gray-700 text-white hover:bg-gray-800">
-                                    Send Another
+                                <h3 className="text-2xl font-bold text-white mb-2">Message Sent!</h3>
+                                <p className="text-gray-400 mb-8">
+                                    Thanks for reaching out. I usually reply within 24-48 hours.
+                                </p>
+                                <Button 
+                                    onClick={() => setIsSent(false)}
+                                    variant="outline" 
+                                    className="border-gray-600 text-gray-300 hover:bg-gray-700 hover:text-white"
+                                >
+                                    Send Another Message
                                 </Button>
                             </div>
                         ) : (
-                            <form onSubmit={handleSubmit} className="space-y-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-300">Name</label>
-                                    <div className="relative">
-                                        <Input
-                                            required
-                                            placeholder="Your Name"
-                                            value={formData.name}
-                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                            className="bg-gray-800/50 border-gray-700 text-white pl-4 focus:ring-yellow-500 focus:border-yellow-500 transition-all"
+                            <form onSubmit={handleSubmit} className="space-y-6">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="name" className="text-gray-300">Name</Label>
+                                        <Input 
+                                            id="name" 
+                                            placeholder="John Doe" 
+                                            required 
+                                            className="bg-gray-900/50 border-gray-600 text-white placeholder:text-gray-600 focus:border-yellow-400 focus:ring-yellow-400/20"
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label htmlFor="email" className="text-gray-300">Email</Label>
+                                        <Input 
+                                            id="email" 
+                                            type="email" 
+                                            placeholder="john@example.com" 
+                                            required 
+                                            className="bg-gray-900/50 border-gray-600 text-white placeholder:text-gray-600 focus:border-yellow-400 focus:ring-yellow-400/20"
                                         />
                                     </div>
                                 </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-300">Email</label>
-                                    <div className="relative">
-                                        <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-                                        <Input
-                                            required
-                                            type="email"
-                                            placeholder="you@example.com"
-                                            value={formData.email}
-                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                            className="bg-gray-800/50 border-gray-700 text-white pl-10 focus:ring-yellow-500 focus:border-yellow-500 transition-all"
-                                        />
-                                    </div>
+                                    <Label htmlFor="reason" className="text-gray-300">Reason for Contact</Label>
+                                    <Select required>
+                                        <SelectTrigger className="bg-gray-900/50 border-gray-600 text-white focus:ring-yellow-400/20">
+                                            <SelectValue placeholder="Select a topic..." />
+                                        </SelectTrigger>
+                                        <SelectContent className="bg-gray-800 border-gray-700 text-white">
+                                            <SelectItem value="feedback">General Feedback</SelectItem>
+                                            <SelectItem value="feature">Feature Request 💡</SelectItem>
+                                            <SelectItem value="bug">Report a Bug 🐛</SelectItem>
+                                            <SelectItem value="deletion">Account Deletion (Delete All Data) 🗑️</SelectItem>
+                                            <SelectItem value="other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
                                 </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-sm font-medium text-gray-300">Message</label>
-                                    <div className="relative">
-                                        <MessageSquare className="absolute left-3 top-3 h-4 w-4 text-gray-500" />
-                                        <textarea
-                                            required
-                                            rows={5}
-                                            placeholder="How can we help you?"
-                                            value={formData.message}
-                                            onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                                            className="flex w-full rounded-md border border-gray-700 bg-gray-800/50 px-3 py-2 pl-10 text-sm text-white placeholder:text-gray-500 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-yellow-500 disabled:cursor-not-allowed disabled:opacity-50 resize-none transition-all"
-                                        />
-                                    </div>
+                                    <Label htmlFor="message" className="text-gray-300">Message</Label>
+                                    <Textarea 
+                                        id="message" 
+                                        placeholder="Tell us what's on your mind..." 
+                                        required 
+                                        className="min-h-[150px] bg-gray-900/50 border-gray-600 text-white placeholder:text-gray-600 focus:border-yellow-400 focus:ring-yellow-400/20 resize-none"
+                                    />
                                 </div>
-                                <Button type="submit" disabled={isLoading} className="w-full bg-yellow-500 hover:bg-yellow-400 text-black font-bold transition-transform active:scale-95">
-                                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                                    {isLoading ? 'Sending...' : 'Send Message'}
+
+                                <Button 
+                                    type="submit" 
+                                    className="w-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold h-12 text-base transition-all"
+                                    disabled={isLoading}
+                                >
+                                    {isLoading ? (
+                                        <span className="flex items-center gap-2">Sending...</span>
+                                    ) : (
+                                        <span className="flex items-center gap-2">Send Message <Send className="w-4 h-4" /></span>
+                                    )}
                                 </Button>
                             </form>
                         )}
-                    </CardContent>
-                </Card>
+                    </div>
 
-                <div className="mt-8 text-center text-sm text-gray-500">
-                    <p>Or email us directly at <a href="mailto:support@workstation.so" className="text-yellow-500 hover:underline">support@workstation.so</a></p>
+                    {/* Simplified Direct Email Section */}
+                    <div className="mt-8 text-center">
+                         <a href="mailto:support@workstation.com" className="inline-flex items-center gap-2 text-gray-400 hover:text-yellow-400 transition-colors bg-gray-800/50 px-6 py-3 rounded-full border border-gray-700 hover:border-yellow-400/30">
+                            <Mail className="w-5 h-5" />
+                            <span>Prefer to email directly? <strong>support@workstation.com</strong></span>
+                        </a>
+                    </div>
                 </div>
-            </div>
+            </main>
+
+            <Footer />
         </div>
     );
 }

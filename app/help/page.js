@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { ArrowLeft, ChevronDown, ChevronUp, BookOpen, Clock, Shield, Zap, RefreshCw } from 'lucide-react';
+import { ArrowLeft, ChevronDown, ChevronUp, BookOpen, Clock, Shield, Zap, RefreshCw, CreditCard, ShieldAlert, Mail } from 'lucide-react';
 
 const FAQItem = ({ question, answer, icon: Icon, isOpen, onClick }) => (
     <div className="border border-gray-800 rounded-xl bg-gray-900/30 overflow-hidden transition-all duration-300 hover:border-gray-700">
@@ -57,6 +57,26 @@ export default function HelpPage() {
             question: "Where is my stats data?",
             answer: "If you are on the Free plan, your stats data is stored locally in your browser. Clearing your browser cache or switching to different device will remove your local stats. If you are a Premium user, your stats are securely saved in the cloud and synced across devices. Just refresh! do if few times if needed, please contact us via the support page if still not visible.",
             icon: RefreshCw
+        },
+        {
+            question: "How does the Focus Timer work?",
+            answer: "Our timer uses the Pomodoro Technique. By default, it runs for 25 minutes of focus followed by a 5-minute break. You can customize these intervals in the settings menu (gear icon) on the timer.",
+            icon: Clock
+        },
+        {
+            question: "What is the refund policy for the Lifetime Deal?",
+            answer: "We offer a strict 14-day refund window for the Lifetime Deal only. This is not an 'automatic' refund button. To request a refund, you must email support@workstation.com within 14 days of purchase with a VALID reason. We review every request manually to prevent system exploitation. If the reason is not valid (e.g., you just wanted to use it for free for two weeks), the request will be denied.",
+            icon: ShieldAlert
+        },
+        {
+            question: "Are monthly subscriptions refundable?",
+            answer: "No. Monthly subscriptions are non-refundable. You can cancel your subscription at any time to prevent future billing, but we do not offer refunds for partial months or past usage.",
+            icon: CreditCard
+        },
+        {
+            question: "Where do I send refund requests?",
+            answer: "All refund requests must be sent directly to support@workstation.com. Please include your PayPal Transaction ID and your specific reason for the request.",
+            icon: Mail
         }
     ];
 

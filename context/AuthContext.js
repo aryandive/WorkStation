@@ -14,6 +14,9 @@ export function AuthProvider({ children }) {
 
     // --- MIGRATION LOGIC (Wrapped in useCallback) ---
     const migrateGuestData = useCallback(async (userId) => {
+        // STEP B: Check for completion flag to prevent re-running
+        if (typeof window !== 'undefined' && localStorage.getItem('ws_migration_done')) return;
+
         const localProjects = JSON.parse(localStorage.getItem('ws_projects') || '[]');
         const localTasks = JSON.parse(localStorage.getItem('ws_tasks') || '[]');
 
@@ -60,6 +63,9 @@ export function AuthProvider({ children }) {
         localStorage.removeItem('ws_projects');
         localStorage.removeItem('ws_tasks');
         localStorage.removeItem('ws_focus_sessions');
+        
+        // Mark as done so we don't check again on this device
+        localStorage.setItem('ws_migration_done', 'true');
 
         console.log("Migration complete.");
         eventBus.dispatch('tasksUpdated');

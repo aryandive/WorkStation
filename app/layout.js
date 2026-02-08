@@ -16,9 +16,14 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Work Station",
-  description: "Your personal focus environment.",
-};
+  title: 'WorkStation - Focus, Journal, & Grow',
+  description: 'The ultimate productivity hub with Pomodoro timer, journaling, and immersive environments.',
+  openGraph: {
+    title: 'WorkStation',
+    description: 'Boost your productivity today.',
+    images: ['/og-image.jpg'], // Add a nice image to public/ folder
+  },
+}
 
 export default function RootLayout({ children }) {
   return (

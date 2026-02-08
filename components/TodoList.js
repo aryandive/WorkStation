@@ -54,6 +54,9 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
     const supabase = createClient();
     const completionSoundRef = useRef(null);
+    
+    // STEP C: Ref to track last fetch time for caching
+    const lastFetchTimeRef = useRef(0);
 
     useEffect(() => {
         if (isOpen) {
@@ -71,6 +74,13 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
     };
 
     const fetchData = useCallback(async (currentUser) => {
+        // STEP C: Prevent Re-fetching if data is fresh (< 5 mins) and exists
+        const now = Date.now();
+        if (currentUser && tasks.length > 0 && (now - lastFetchTimeRef.current < 5 * 60 * 1000)) {
+            setLoading(false);
+            return;
+        }
+
         setLoading(true);
         if (currentUser) {
             // FIX 1: Filter out soft-deleted projects
@@ -82,16 +92,34 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
             if (projError) console.error("Error fetching projects:", projError);
 
-            const { data: tasksData, error: taskError } = await supabase.from('todos').select('*').eq('user_id', currentUser.id);
+            // STEP A: Performance Boost - Only fetch Active tasks OR recently completed (7 days)
+            // This prevents loading thousands of historical tasks every time.
+            const sevenDaysAgo = new Date();
+            sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+            const isoDate = sevenDaysAgo.toISOString();
+
+            const { data: tasksData, error: taskError } = await supabase
+                .from('todos')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .or(`is_complete.eq.false,updated_at.gt.${isoDate}`);
+
             if (taskError) console.error("Error fetching tasks:", taskError);
 
             setProjects(projectsData || []);
             setTasks(tasksData || []);
+            
             if ((projectsData || []).length > 0 && !activeProjectId) {
-                setActiveProjectId(projectsData[0].id);
+                // Keep current selection if valid, else select first
+                if (!activeProjectId || !projectsData.find(p => p.id === activeProjectId)) {
+                    setActiveProjectId(projectsData[0].id);
+                }
             } else if ((projectsData || []).length === 0) {
                 setActiveProjectId(null);
             }
+            
+            // Update cache timestamp on successful fetch
+            lastFetchTimeRef.current = Date.now();
         } else {
             const localProjects = JSON.parse(localStorage.getItem('ws_projects')) || [{ id: 'local_default', name: 'My Tasks', created_at: new Date().toISOString() }];
             const localTasks = JSON.parse(localStorage.getItem('ws_tasks')) || [];
@@ -102,7 +130,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
             }
         }
         setLoading(false);
-    }, [activeProjectId, supabase]);
+    }, [activeProjectId, supabase, tasks.length]); // Dependencies
 
     const updateTask = useCallback(async (taskId, updates) => {
         const originalTasks = [...tasks];
@@ -118,7 +146,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
         eventBus.dispatch('tasksUpdated');
 
         if (user) {
-            // FIX 2: Restored correct Task Update logic (removed the Project Delete code from here)
+            // FIX 2: Restored correct Task Update logic
             const { error } = await supabase.from('todos').update(updates).eq('id', taskId);
             
             if (error) {
