@@ -113,7 +113,8 @@ export default function MasterPlayer() {
                     style={{ backgroundColor: '#0f0f0f' }} 
                 >
                      <Image
-                        src={activeScene.thumbnail || activeScene.path || '/placeholder.jpg'}
+                        // SAFETY LAYER 2: Try the path, fallback to local placeholder if empty
+                        src={activeScene.thumbnail || activeScene.path || '/placeholder.webp'}
                         alt="Background Ambience"
                         fill
                         priority
@@ -122,8 +123,8 @@ export default function MasterPlayer() {
                         className="object-cover"
                         draggable={false}
                         onError={(e) => {
-                            e.target.src = '/placeholder.jpg';
-                            e.target.srcset = '/placeholder.jpg';
+                            e.target.src = '/placeholder.webp'; // Ensure you have a public/placeholder.webp
+                            e.target.srcset = '/placeholder.webp';
                         }}
                     />
                     <div className="absolute inset-0 bg-black/20" />
