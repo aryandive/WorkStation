@@ -98,6 +98,17 @@ const TextEditor = forwardRef(({
         }
     }, [isContentLoading, entry?.content]); // Dependency: Loading state or content updates
 
+    useEffect(() => {
+        // If we are saving or just typed (local title diff/content diff), we are 'dirty'
+        // leveraging the existing saveStatus prop is the most reliable way.
+        const isUnsaved = saveStatus === 'saving' || saveStatus === 'unsaved';
+        
+        const event = new CustomEvent('sys-journal-status', { 
+            detail: { isUnsaved } 
+        });
+        window.dispatchEvent(event);
+    }, [saveStatus]);
+
     // --- Saving Logic ---
     const triggerSave = useCallback((newTitle, newContent) => {
         latestForFlushRef.current = { title: newTitle, content: newContent };

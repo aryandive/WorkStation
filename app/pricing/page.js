@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
     CheckCircle2,
     ShieldCheck,
@@ -11,10 +11,9 @@ import {
     Clock,
     Server,
     HeartHandshake,
-    AlertCircle
+    BrainCircuit // Icon for the new 3rd point
 } from 'lucide-react';
 import Link from 'next/link';
-import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -27,7 +26,6 @@ import PayPalSubscriptionButton from '@/components/PayPalSubscriptionButton';
 // --- CONFIGURATION ---
 const MONTHLY_PLAN_ID = process.env.NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID;
 const CLIENT_ID = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
-const LIFETIME_PRICE = "19.99";
 
 // --- TIERS DATA ---
 const TIERS = [
@@ -57,7 +55,7 @@ const TIERS = [
         subtext: 'Billed monthly. Cancel anytime.',
         description: 'Unlock the full productivity suite.',
         // Visual Trap: Show the yearly cost to discourage renting
-        yearlyAnchor: '$59.88 / yr', 
+        yearlyAnchor: '$59.88 / yr',
         features: [
             'Unlimited Cloud Sync (All Devices)',
             'Unlimited Journal Entries',
@@ -105,8 +103,8 @@ export default function PricingPage() {
     const initialOptions = useMemo(() => ({
         "client-id": CLIENT_ID,
         currency: "USD",
-        intent: "subscription",
-        vault: true,
+        intent: "capture", // Changed to 'capture' for one-time payments (standard for Orders)
+        vault: true,       // Keep vault true for the subscription buttons to work in the same provider
     }), []);
 
     const handleApproveSubscription = async (data) => {
@@ -114,9 +112,41 @@ export default function PricingPage() {
         window.location.href = '/journal?upgraded=true&type=subscription';
     };
 
-    const handleApproveLifetime = async (data, actions) => {
-        console.log("Lifetime payment successful:", data);
-        window.location.href = '/journal?upgraded=true&type=lifetime';
+    // --- UPDATED: Secure Lifetime Approval ---
+    const handleApproveLifetime = async (details, actions) => {
+        console.log("Lifetime payment captured:", details);
+
+        try {
+            // 1. Call our new verification endpoint to update Supabase immediately
+            const res = await fetch('/api/paypal/verify-order', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ orderID: details.id }), // details.id is the Order ID
+            });
+
+            const result = await res.json();
+
+            if (!res.ok) {
+                // Log the FULL result to the console so we can see the "real" error
+                console.error("❌ SERVER ERROR DETECTED:", result);
+
+                // Throw a readable error string
+                const errorMessage = typeof result.error === 'object'
+                    ? JSON.stringify(result.error)
+                    : result.error || 'Verification failed';
+
+                throw new Error(errorMessage);
+            }
+
+            // 2. Success! Redirect to the journal
+            window.location.href = '/journal?upgraded=true&type=lifetime';
+
+        } catch (err) {
+            console.error("Verification Error:", err);
+            setError("Payment successful, but account update failed. Please contact support with Order ID: " + details.id);
+        }
     };
 
     return (
@@ -140,7 +170,7 @@ export default function PricingPage() {
                             </div>
 
                             <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight mb-6 text-white leading-tight">
-                                Invest in your Focus.<br/>
+                                Invest in your Focus.<br />
                                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-amber-500">
                                     Not a Subscription.
                                 </span>
@@ -150,8 +180,9 @@ export default function PricingPage() {
                                 Stop renting your tools. Help a student developer keep the lights on and get <span className="text-white font-bold">Lifetime Access</span> for the price of a pizza.
                             </p>
 
+                            {/* UPDATED: 14-Day Guarantee Text */}
                             <p className="text-sm text-gray-500 font-medium mb-16 flex justify-center items-center gap-2">
-                                <ShieldCheck className="w-4 h-4" /> 30-day money-back guarantee
+                                <ShieldCheck className="w-4 h-4" /> 14-day money-back guarantee*
                             </p>
                         </div>
 
@@ -197,6 +228,9 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
     const isFree = tier.planId === 'free';
     const isLifetime = tier.id === 'lifetime';
 
+    // NEW: State for Terms Checkbox (Lifetime Only)
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
+
     const handleFreeClick = (e) => {
         if (isFree && user) {
             e.preventDefault();
@@ -209,10 +243,8 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
             'relative flex flex-col p-8 rounded-2xl border transition-all duration-300 h-full',
             'bg-gray-800/40 backdrop-blur-sm',
             isHero
-                // CHANGED: Removed 'scale-105' and 'shadow-[...]'
-                // Kept 'border-yellow-400' and 'ring-1' (The Golden Ring)
                 ? 'border-yellow-400/50 bg-gray-800/90 ring-1 ring-yellow-400/30 z-10'
-               : 'border-gray-700 hover:border-gray-600 z-0'
+                : 'border-gray-700 hover:border-gray-600 z-0'
         )}>
             {/* Scarcity Badge for Hero */}
             {isHero && (
@@ -245,21 +277,18 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
                     )}
                 </div>
 
-                {/* VISUAL TRAP: Show Yearly Cost on Monthly Plan */}
                 {tier.yearlyAnchor && (
                     <div className="mt-1 text-sm font-medium text-red-400/80 line-through decoration-red-500/50">
                         ({tier.yearlyAnchor})
                     </div>
                 )}
 
-                {/* Lifetime Suffix */}
                 {isLifetime && (
                     <div className="mt-1 text-sm font-bold text-yellow-500 uppercase tracking-widest">
                         Pay Once • Own Forever
                     </div>
                 )}
 
-                {/* Subtext */}
                 {!isLifetime && tier.subtext && (
                     <div className="mt-2 text-sm text-gray-400 font-medium">
                         {tier.subtext}
@@ -308,24 +337,46 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
                                 {isHero ? "Login to Support" : "Login to Subscribe"}
                             </Button>
                         ) : (
-                            <div className={cn("rounded-lg overflow-hidden relative", isHero && "ring-2 ring-yellow-400/50 ring-offset-2 ring-offset-[#1A202C]")}>
+                            <div className={cn("rounded-lg relative", isHero && "ring-2 ring-yellow-400/50 ring-offset-2 ring-offset-[#1A202C]")}>
+
+                                {/* --- NEW: Refund Policy Checkbox for Lifetime --- */}
+                                {isLifetime && (
+                                    <div className="mb-3 flex items-start gap-2 px-1">
+                                        <input
+                                            type="checkbox"
+                                            id="terms-check"
+                                            checked={agreedToTerms}
+                                            onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                            className="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-700 text-yellow-500 focus:ring-yellow-500/50 cursor-pointer accent-yellow-500"
+                                        />
+                                        <label htmlFor="terms-check" className="text-[11px] text-gray-400 leading-tight cursor-pointer select-none">
+                                            I have read the <Link href="/terms" className="text-yellow-400 hover:underline">terms and conditions and refund policy</Link> before proceeding.
+                                        </label>
+                                    </div>
+                                )}
+
                                 {isLifetime ? (
-                                    <PayPalButtons
-                                        style={{ shape: 'rect', label: 'checkout', height: 48 }}
-                                        createOrder={(data, actions) => {
-                                            return actions.order.create({
-                                                purchase_units: [{
-                                                    description: "WorkStation Lifetime Access (Server Fund)",
-                                                    amount: { value: "19.99" } // Assuming LIFETIME_PRICE const is available in scope
-                                                }]
-                                            });
-                                        }}
-                                        onApprove={(data, actions) => {
-                                            return actions.order.capture().then((details) => {
-                                                onApproveLifetime(details, actions);
-                                            });
-                                        }}
-                                    />
+                                    <div className={cn("transition-opacity duration-200", !agreedToTerms && "opacity-50 pointer-events-none grayscale")}>
+                                        <PayPalButtons
+                                            disabled={!agreedToTerms}
+                                            style={{ shape: 'rect', label: 'checkout', height: 48 }}
+                                            createOrder={(data, actions) => {
+                                                // CRITICAL: Passing user ID for Webhook/Backend
+                                                return actions.order.create({
+                                                    purchase_units: [{
+                                                        description: "WorkStation Lifetime Access (Server Fund)",
+                                                        amount: { value: "19.99" },
+                                                        custom_id: user?.id
+                                                    }]
+                                                });
+                                            }}
+                                            onApprove={(data, actions) => {
+                                                return actions.order.capture().then((details) => {
+                                                    onApproveLifetime(details, actions);
+                                                });
+                                            }}
+                                        />
+                                    </div>
                                 ) : (
                                     <PayPalSubscriptionButton
                                         planId={tier.planId}
@@ -339,7 +390,7 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
                     </div>
                 )}
             </div>
-            
+
             {/* Urgency Footer for Lifetime */}
             {isHero && (
                 <p className="text-[10px] text-center text-yellow-500/80 mt-3 font-medium">
@@ -357,10 +408,10 @@ function DeveloperNoteSection() {
             <div className="max-w-3xl mx-auto bg-[#1A202C] border border-gray-700 rounded-2xl p-8 relative overflow-hidden shadow-2xl">
                 {/* Decorative Quote Mark */}
                 <div className="absolute top-4 left-6 text-7xl text-gray-800 font-serif opacity-50">“</div>
-                
+
                 <div className="relative z-10">
                     <div className="flex items-center gap-4 mb-6">
-                         {/* Avatar / Placeholder */}
+                        {/* Avatar / Placeholder */}
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-yellow-400 to-amber-600 flex items-center justify-center text-gray-900 font-bold text-xl shadow-lg">
                             AD
                         </div>
@@ -369,22 +420,22 @@ function DeveloperNoteSection() {
                             <p className="text-gray-400 text-sm">Aryan Dive, ECE Student & Solo Founder</p>
                         </div>
                     </div>
-                    
+
                     <div className="space-y-4 text-gray-300 leading-relaxed">
                         <p>
                             Hi, I&apos;m Aryan. I&apos;m not a big tech company; I&apos;m an ECE student building this from my dorm room because I refused to pay another monthly subscription for a simple productivity tool.
                         </p>
                         <p>
-                            <span className="text-yellow-400 font-semibold">Why the limited Lifetime Deal?</span> It&apos;s not a gimmick—it&apos;s a necessity. 
+                            <span className="text-yellow-400 font-semibold">Why the limited Lifetime Deal?</span> It&apos;s not a gimmick—it&apos;s a necessity.
                             I&apos;ve calculated the exact cost to keep WorkStation fast, secure, and ad-free, covering everything from <span className="text-white font-medium">VPS hosting and Apple Developer fees to database backups</span>.
                         </p>
                         <p>
-                            Instead of taking venture capital, I&apos;m crowdfunding these costs directly from you. 
+                            Instead of taking venture capital, I&apos;m crowdfunding these costs directly from you.
                             The revenue from these 25 spots goes <span className="text-white font-medium">100% into infrastructure</span>, ensuring the app survives. You get a tool forever, I get to keep the lights on.
                         </p>
                         <p>
-                            And because I want you to trust this 
-                            indie project, I offer a <span className="text-yellow-400 font-semibold">personal 14-day money-back guarantee</span>. 
+                            And because I want you to trust this
+                            indie project, I offer a <span className="text-yellow-400 font-semibold">personal 14-day money-back guarantee</span>.
                             If it doesn&apos;t help you, I&apos;ll refund you myself—no bots, just me.
                         </p>
                     </div>
@@ -410,15 +461,15 @@ function ValueBreakdownSection() {
                     {/* Math Card */}
                     <div className="bg-gray-800/50 rounded-xl p-8 border border-gray-700 flex flex-col justify-center">
                         <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
-                             <TrendingDown className="text-green-400" /> The Cold Hard Math
+                            <TrendingDown className="text-green-400" /> The Cold Hard Math
                         </h3>
-                        
+
                         <div className="space-y-6">
                             <div className="flex justify-between items-center p-4 bg-gray-900/50 rounded-lg">
                                 <span className="text-gray-400">1 Year of Monthly ($4.99)</span>
                                 <span className="text-red-400 line-through font-semibold">$59.88</span>
                             </div>
-                            
+
                             <div className="flex justify-between items-center p-4 bg-yellow-900/20 border border-yellow-500/30 rounded-lg">
                                 <span className="text-yellow-100 font-medium">Lifetime Access</span>
                                 <span className="text-yellow-400 font-bold text-xl">$19.99</span>
@@ -426,7 +477,7 @@ function ValueBreakdownSection() {
                         </div>
 
                         <p className="mt-6 text-gray-400 text-sm text-center">
-                            You break even in just <span className="text-white font-bold">4 months</span>. 
+                            You break even in just <span className="text-white font-bold">4 months</span>.
                             After that, you profit forever.
                         </p>
                     </div>
@@ -453,6 +504,19 @@ function ValueBreakdownSection() {
                                 <h4 className="font-bold text-white text-lg">Direct Influence</h4>
                                 <p className="text-gray-400 text-sm mt-1">
                                     &quot;Believers&quot; get a special badge in the database. When you request a feature (like new sounds or integrations), I build it first.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* NEW: 3rd Point */}
+                        <div className="flex gap-4">
+                            <div className="bg-purple-500/10 p-3 rounded-lg h-fit shrink-0">
+                                <BrainCircuit className="w-6 h-6 text-purple-400" />
+                            </div>
+                            <div>
+                                <h4 className="font-bold text-white text-lg">Mental Freedom</h4>
+                                <p className="text-gray-400 text-sm mt-1">
+                                    No recurring billing. No &quot;cancel anytime&quot; anxiety. One payment, zero clutter, and full ownership of your focus tools.
                                 </p>
                             </div>
                         </div>

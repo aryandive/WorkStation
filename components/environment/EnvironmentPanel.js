@@ -229,7 +229,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     const {
         activeScene, activeSounds, soundVolumes, youtube,
         playScene, toggleSound, changeVolume, playYoutube, stopYoutube,
-        setYoutubeShowPlayer, setYoutubeMute, setYoutubeShowControls
+        setYoutubeShowPlayer, setYoutubeMute, setYoutubeShowControls, loadingSounds
     } = useEnvironment();
     
     const [activeTab, setActiveTab] = useState('scenes');
@@ -852,6 +852,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
                                 {soundscapes.map(sound => {
                                     const isActive = activeSounds.includes(sound.path);
+                                    const isLoading = loadingSounds[sound.path];
                                     const volume = soundVolumes[sound.path] || 0.5;
                                     const Icon = sound.icon;
 
@@ -866,14 +867,22 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             <button
                                                 onClick={() => toggleSound(sound.path)}
                                                 className="w-full p-4 flex flex-col items-center gap-3 text-center"
+                                                disabled={isLoading && !isActive} // Prevent double clicks
                                             >
-                                                <div className={cn("p-3 rounded-full transition-colors", isActive ? "bg-yellow-400 text-black" : "bg-gray-700 text-gray-400 group-hover:text-white")}>
-                                                    <Icon size={24} />
+                                                <div className={cn("p-3 rounded-full transition-colors relative", isActive ? "bg-yellow-400 text-black" : "bg-gray-700 text-gray-400 group-hover:text-white")}>
+                                                    {/* --- NEW: Spinner or Icon --- */}
+                                                    {isLoading ? (
+                                                        <Loader2 size={24} className="animate-spin text-current" />
+                                                    ) : (
+                                                        <Icon size={24} />
+                                                    )}
                                                 </div>
                                                 <span className={cn("text-sm font-medium", isActive ? "text-yellow-400" : "text-gray-400 group-hover:text-gray-200")}>
                                                     {sound.name}
                                                 </span>
                                             </button>
+                                            
+                                            {/* (Volume Slider Code remains the same...) */}
                                             <div className={cn(
                                                 "px-4 pb-4 transition-all duration-300",
                                                 isActive ? "opacity-100 max-h-20" : "opacity-0 max-h-0 overflow-hidden"

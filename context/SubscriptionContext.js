@@ -44,7 +44,7 @@ export function SubscriptionProvider({ children }) {
     const value = useMemo(() => ({
         subscription,
         // --- DEV OVERRIDE: Force isPro to true for testing ---
-        isPro: !!subscription || true, 
+        isPro: !!subscription, 
         loading,
     }), [subscription, loading]);
 

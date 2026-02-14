@@ -1,87 +1,209 @@
-import { createClient } from '@/utils/supabase/server';
-import { headers } from 'next/headers';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import Link from 'next/link';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { AlertCircle, Eye, EyeOff, CheckCircle2, Mail } from 'lucide-react'; 
+import { signup, signUpWithGoogle } from './actions';
 
-export default async function SignupPage({ searchParams }) {
-    // If already signed in, send user away from signup
-    const supabaseForPage = await createClient();
-    const { data: { user: existingUser } } = await supabaseForPage.auth.getUser();
-    if (existingUser) {
-        return redirect('/?message=' + encodeURIComponent('You are already signed in'));
-    }
+export default function SignupPage() {
+    // UI States
+    const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    
+    // Feedback States
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState(false); // If true, show "Check Email" screen
 
-    const signUp = async (formData) => {
-        'use server';
-        const hdrs = await headers();
-        const headerOrigin = hdrs.get('origin');
-        const fallbackOrigin = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
-        const origin = headerOrigin || fallbackOrigin;
-        const email = formData.get('email');
-        const password = formData.get('password');
-        const supabase = await createClient();
+    const handleSubmit = async (event) => {
+        event.preventDefault();
+        setLoading(true);
+        setError('');
 
-        const { error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: {
-                emailRedirectTo: `${origin}/auth/callback`,
-            },
-        });
-
-        if (error) {
-            const msg = encodeURIComponent(error.message || 'Could not create account. Please try again.');
-            return redirect(`/signup?message=${msg}`);
+        const formData = new FormData(event.currentTarget);
+        
+        try {
+            const result = await signup(formData);
+            if (result?.error) {
+                setError(result.error);
+                setLoading(false);
+            } else {
+                // Show the "Check your email" success state
+                setSuccess(true);
+                setLoading(false);
+            }
+        } catch (e) {
+            setError('An unexpected error occurred.');
+            setLoading(false);
         }
-
-        const successMsg = encodeURIComponent('Check your email to confirm your account. If you did not receive it, check Spam and ensure your redirect URL is allowed in Supabase.');
-        return redirect(`/signup?message=${successMsg}`);
     };
 
-    const sp = await searchParams;
+    const handleGoogleSignUp = async () => {
+        setGoogleLoading(true);
+        setError('');
+        try {
+            await signUpWithGoogle();
+        } catch (error) {
+            setError('Failed to initiate Google sign up.');
+            setGoogleLoading(false);
+        }
+    };
 
+    // --- SUCCESS STATE (Check Email) ---
+    if (success) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-[#0D1117] px-4 relative overflow-hidden">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-green-500/5 rounded-full blur-[100px] pointer-events-none" />
+                
+                <Card className="w-full max-w-md bg-[#161B22] border-[#30363D] shadow-2xl relative z-10 text-center p-6">
+                    <div className="mx-auto w-16 h-16 bg-green-900/30 rounded-full flex items-center justify-center mb-6 border border-green-500/30">
+                        <Mail className="w-8 h-8 text-green-400" />
+                    </div>
+                    <CardTitle className="text-2xl font-bold text-white mb-2">Check your inbox</CardTitle>
+                    <CardDescription className="text-gray-400 text-base mb-6">
+                        We&apos;ve sent a confirmation link to your email. Please click the link to activate your account and start your focus journey.
+                    </CardDescription>
+                    <Button 
+                        onClick={() => setSuccess(false)} 
+                        variant="outline" 
+                        className="w-full border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white"
+                    >
+                        Back to Sign Up
+                    </Button>
+                </Card>
+            </div>
+        );
+    }
+
+    // --- SIGN UP FORM ---
     return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-900">
-            <Card className="w-full max-w-sm bg-gray-800 border-gray-700 text-white">
-                <CardHeader className="text-center">
-                    <CardTitle className="text-2xl font-bold">Create an Account</CardTitle>
-                    <CardDescription>Start your focus journey with Work Station.</CardDescription>
+        <div className="min-h-screen flex items-center justify-center bg-[#0D1117] px-4 py-12 relative overflow-hidden">
+            
+            {/* Background Glow */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-yellow-500/5 rounded-full blur-[100px] pointer-events-none" />
+
+            <Card className="w-full max-w-md bg-[#161B22] border-[#30363D] shadow-2xl relative z-10">
+                <CardHeader className="space-y-1 text-center pb-2">
+                    <CardTitle className="text-2xl font-bold text-white tracking-tight">
+                        Create an account
+                    </CardTitle>
+                    <CardDescription className="text-gray-400">
+                        Join Work Station to boost your productivity
+                    </CardDescription>
                 </CardHeader>
+                
                 <CardContent className="space-y-4">
-                    <form className="space-y-4" action={signUp}>
-                        <Input
-                            name="email"
-                            placeholder="Email"
-                            required
-                            className="bg-gray-700 border-gray-600 placeholder-gray-400"
-                        />
-                        <Input
-                            type="password"
-                            name="password"
-                            placeholder="Password"
-                            required
-                            className="bg-gray-700 border-gray-600 placeholder-gray-400"
-                        />
-                        <Button type="submit" className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold">
-                            Sign Up
+                    
+                    {error && (
+                        <div className="bg-red-900/20 border border-red-500/50 rounded-md p-3 flex items-start gap-3 text-red-200 text-sm animate-in fade-in slide-in-from-top-1">
+                            <AlertCircle className="w-5 h-5 text-red-500 shrink-0" />
+                            <span>{error}</span>
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="email" className="text-gray-300 font-medium">Email</Label>
+                            <Input 
+                                id="email" 
+                                name="email" 
+                                type="email" 
+                                placeholder="name@example.com" 
+                                required 
+                                className="bg-[#0D1117] border-[#30363D] text-white placeholder:text-gray-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all h-10"
+                            />
+                        </div>
+                        
+                        <div className="space-y-2">
+                            <Label htmlFor="password" className="text-gray-300 font-medium">Password</Label>
+                            <div className="relative">
+                                <Input 
+                                    id="password" 
+                                    name="password" 
+                                    type={showPassword ? "text" : "password"} 
+                                    placeholder="Create a password" 
+                                    required 
+                                    minLength={6}
+                                    className="bg-[#0D1117] border-[#30363D] text-white placeholder:text-gray-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all h-10 pr-10"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowPassword(!showPassword)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                                >
+                                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                </button>
+                            </div>
+                        </div>
+
+                        <Button 
+                            type="submit" 
+                            disabled={loading || googleLoading}
+                            className="w-full bg-yellow-500 text-black hover:bg-yellow-400 font-bold h-10 transition-all shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
+                        >
+                            {loading ? (
+                                <div className="flex items-center gap-2">
+                                    <svg aria-hidden="true" role="status" className="w-4 h-4 text-black animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="currentColor" fillOpacity="0.2"/>
+                                        <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="currentColor"/>
+                                    </svg>
+                                    Creating account...
+                                </div>
+                            ) : (
+                                "Create Account"
+                            )}
                         </Button>
                     </form>
 
-                    {sp?.message && (
-                        <p className="mt-4 p-4 bg-gray-700 text-gray-300 text-center rounded-md">
-                            {sp.message}
-                        </p>
-                    )}
-
-                    <div className="text-center text-sm">
-                        <Link href="/login" className="text-yellow-400 hover:underline">
-                            Already have an account? Sign in
-                        </Link>
+                    <div className="relative">
+                        <div className="absolute inset-0 flex items-center">
+                            <span className="w-full border-t border-gray-700" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                            <span className="bg-[#161B22] px-2 text-gray-500">Or sign up with</span>
+                        </div>
                     </div>
+
+                    <button
+                        onClick={handleGoogleSignUp}
+                        disabled={loading || googleLoading}
+                        className="w-full flex items-center justify-center gap-3 bg-google-button-blue rounded-md p-0.5 pr-3 transition-colors duration-300 hover:bg-google-button-blue-hover disabled:opacity-70 disabled:cursor-not-allowed h-11"
+                    >
+                        <div className="flex items-center justify-center bg-white w-10 h-10 rounded-l shrink-0">
+                            {googleLoading ? (
+                                <svg aria-hidden="true" role="status" className="w-5 h-5 text-gray-300 animate-spin" viewBox="0 0 100 101" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M100 50.5908C100 78.2051 77.6142 100.591 50 100.591C22.3858 100.591 0 78.2051 0 50.5908C0 22.9766 22.3858 0.59082 50 0.59082C77.6142 0.59082 100 22.9766 100 50.5908ZM9.08144 50.5908C9.08144 73.1895 27.4013 91.5094 50 91.5094C72.5987 91.5094 90.9186 73.1895 90.9186 50.5908C90.9186 27.9921 72.5987 9.67226 50 9.67226C27.4013 9.67226 9.08144 27.9921 9.08144 50.5908Z" fill="#E5E7EB"/>
+                                    <path d="M93.9676 39.0409C96.393 38.4038 97.8624 35.9116 97.0079 33.5539C95.2932 28.8227 92.871 24.3692 89.8167 20.348C85.8452 15.1192 80.8826 10.7238 75.2124 7.41289C69.5422 4.10194 63.2754 1.94025 56.7698 1.05124C51.7666 0.367541 46.6976 0.446843 41.7345 1.27873C39.2613 1.69328 37.813 4.19778 38.4501 6.62326C39.0873 9.04874 41.5694 10.4717 44.0505 10.1071C47.8511 9.54855 51.7191 9.52689 55.5402 10.0491C60.8642 10.7766 65.9928 12.5457 70.6331 15.2552C75.2735 17.9648 79.3347 21.5619 82.5849 25.841C84.9175 28.9121 86.7997 32.2913 88.1811 35.8758C89.083 38.2158 91.5421 39.6781 93.9676 39.0409Z" fill="#4285F4"/>
+                                </svg>
+                            ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" class="w-5 h-5">
+                                    <title>Sign in with Google</title>
+                                    <desc>Google G Logo</desc>
+                                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" class="fill-google-logo-blue"></path>
+                                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" class="fill-google-logo-green"></path>
+                                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" class="fill-google-logo-yellow"></path>
+                                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" class="fill-google-logo-red"></path>
+                                </svg>
+                            )}
+                        </div>
+                        <span className="text-sm text-white tracking-wider font-medium">
+                            {googleLoading ? "Connecting..." : "Sign up with Google"}
+                        </span>
+                    </button>
                 </CardContent>
+
+                <CardFooter className="flex justify-center pb-6">
+                    <p className="text-sm text-gray-400">
+                        Already have an account?{' '}
+                        <Link href="/login" className="text-yellow-500 hover:text-yellow-400 font-medium hover:underline transition-all">
+                            Sign in
+                        </Link>
+                    </p>
+                </CardFooter>
             </Card>
         </div>
     );

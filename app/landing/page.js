@@ -106,7 +106,7 @@ export default function LandingPage() {
                     <div className="flex flex-col md:flex-row items-center justify-center gap-4 mb-16">
                         <Button asChild size="lg" className="h-14 px-8 text-lg font-bold bg-yellow-400 text-gray-900 hover:bg-yellow-300 shadow-[0_0_20px_rgba(250,204,21,0.3)] hover:shadow-[0_0_30px_rgba(250,204,21,0.5)] transition-all transform hover:scale-105">
                             <Link href="/pricing">
-                                Get Early Bird Access <ArrowRight className="ml-2 w-5 h-5" />
+                                Get Lifetime Access <ArrowRight className="ml-2 w-5 h-5" />
                             </Link>
                         </Button>
                         <Button asChild size="lg" variant="outline" className="h-14 px-8 text-lg font-semibold border-gray-700 hover:bg-gray-800 text-gray-300 hover:text-white backdrop-blur-sm">
@@ -118,7 +118,7 @@ export default function LandingPage() {
 
                     <div className="flex flex-col items-center gap-3 animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-200">
                         <p className="text-sm font-medium text-gray-500 uppercase tracking-widest">
-                            Official Launch In
+                            Next Update In
                         </p>
                         <CountdownTimer />
                     </div>
@@ -359,24 +359,24 @@ export default function LandingPage() {
 
                     <div className="relative z-10">
                         <div className="inline-block bg-yellow-500 text-black text-xs font-bold px-3 py-1 rounded-full mb-6 uppercase tracking-wider">
-                            Limited Time Launch Offer
+                            Limited Time Lifetime Offer
                         </div>
                         <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
                             Lock in the <span className="text-yellow-400">Founder&apos;s Rate</span>.
                         </h2>
                         <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-                            Join the first 500 members and get <span className="text-white font-bold">50% off for life</span>. <br/>
-                            Pay $2.50/mo instead of $7.99/mo.
+                            Join the first 25 members and get <span className="text-white font-bold">Lifetime Access</span>. <br/>
+                            Pay $19.99 once instead of a monthly subscription.
                         </p>
                         
                         <div className="flex flex-col sm:flex-row justify-center gap-4">
                             <Button asChild size="lg" className="h-14 px-10 text-lg font-bold bg-yellow-400 text-gray-900 hover:bg-yellow-300 shadow-xl hover:scale-105 transition-transform">
-                                <Link href="/pricing">Claim 50% Discount</Link>
+                                <Link href="/pricing">Lifetime Deal</Link>
                             </Button>
                         </div>
                         
                         <p className="mt-6 text-sm text-gray-500 flex items-center justify-center gap-2">
-                            <ShieldCheck className="w-4 h-4" /> 30-day money-back guarantee
+                            <ShieldCheck className="w-4 h-4" /> 14-day money-back guarantee*
                         </p>
                     </div>
                 </div>
