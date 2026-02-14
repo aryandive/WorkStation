@@ -2,11 +2,18 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { format } from 'date-fns';
-import { FileText, Calendar, Clock, ChevronRight } from 'lucide-react';
+import { FileText, Calendar, Clock, ChevronRight, Crown, AlertCircle } from 'lucide-react';
+import { useSubscription } from '@/context/SubscriptionContext'; // Import Subscription Context
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 export default function JournalEntriesModal({ isOpen, setIsOpen, allEntries, onSelectEntry }) {
+    // 1. Get Subscription Status
+    const { isPro } = useSubscription();
+    const FREE_LIMIT = 30;
 
-    // Convert entries to array, sort by date (newest first). Show all entries (dots/count match).
+    // Convert entries to array, sort by date (newest first)
     const sortedEntries = Object.entries(allEntries)
         .map(([dateKey, data]) => {
             const [year, month, day] = dateKey.split('-').map(Number);
@@ -16,9 +23,7 @@ export default function JournalEntriesModal({ isOpen, setIsOpen, allEntries, onS
                 dateKey,
                 dateObj,
                 title: data.title || 'Untitled Entry',
-                // Use updated_at if available, otherwise fallback to created_at
                 timestamp: data.updated_at || data.created_at || null,
-                // Handle snippet gracefully if content is not loaded yet
                 snippet: data.content 
                     ? data.content.replace(/<[^>]*>/g, '').substring(0, 60) + '...' 
                     : 'Click to read entry...'
@@ -26,16 +31,59 @@ export default function JournalEntriesModal({ isOpen, setIsOpen, allEntries, onS
         })
         .sort((a, b) => b.dateObj - a.dateObj);
 
+    // 2. Calculate Usage Metrics
+    const entryCount = sortedEntries.length;
+    const usagePercent = Math.min((entryCount / FREE_LIMIT) * 100, 100);
+    
+    // Color Logic: <66% Green, <90% Yellow, >90% Red
+    const progressColor = usagePercent > 90 ? 'bg-red-500' : (usagePercent > 66 ? 'bg-yellow-500' : 'bg-green-500');
+
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
             <DialogContent className="bg-gray-900 border-gray-700 text-white max-w-2xl h-[80vh] flex flex-col p-0">
-                <DialogHeader className="p-6 pb-2">
-                    <DialogTitle className="text-2xl font-bold text-yellow-400 flex items-center gap-2">
-                        <FileText className="w-6 h-6" /> Journal History
-                    </DialogTitle>
-                    <DialogDescription className="text-gray-400">
-                        {sortedEntries.length} entries recorded.
-                    </DialogDescription>
+                <DialogHeader className="p-6 pb-4 border-b border-gray-800">
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <DialogTitle className="text-2xl font-bold text-yellow-400 flex items-center gap-2">
+                                <FileText className="w-6 h-6" /> Journal History
+                            </DialogTitle>
+                            <DialogDescription className="text-gray-400 mt-1">
+                                {entryCount} entries recorded.
+                            </DialogDescription>
+                        </div>
+
+                        {/* --- NEW: Plan Usage Meter --- */}
+                        <div className="bg-gray-800 rounded-lg p-3 border border-gray-700 w-48 shadow-inner">
+                            {isPro ? (
+                                <div className="flex items-center gap-2 text-yellow-400 font-bold text-sm justify-center">
+                                    <Crown className="w-4 h-4" /> Unlimited Access
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="flex justify-between text-xs font-bold mb-1.5">
+                                        <span className="text-gray-300">Free Plan</span>
+                                        <span className={cn(
+                                            entryCount >= FREE_LIMIT ? "text-red-400" : "text-gray-400"
+                                        )}>
+                                            {entryCount} / {FREE_LIMIT} Used
+                                        </span>
+                                    </div>
+                                    {/* Progress Bar Track */}
+                                    <div className="h-2 w-full bg-gray-700 rounded-full overflow-hidden">
+                                        <div 
+                                            className={cn("h-full transition-all duration-500", progressColor)} 
+                                            style={{ width: `${usagePercent}%` }}
+                                        />
+                                    </div>
+                                    {entryCount >= 20 && (
+                                        <Link href="/pricing" onClick={() => setIsOpen(false)} className="block mt-2 text-[10px] text-center text-yellow-500 hover:text-yellow-400 underline">
+                                            Upgrade for Unlimited
+                                        </Link>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
                 </DialogHeader>
 
                 <div className="flex-grow overflow-y-auto custom-scrollbar p-6 pt-2 space-y-3">

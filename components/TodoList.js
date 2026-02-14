@@ -189,12 +189,13 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
         const taskToUpdate = tasks.find(t => t.id === taskId);
         if (!taskToUpdate) return;
 
+        // UX: Timer reflects effort only; completion stays manual.
         const newPomodorosSpent = (taskToUpdate.pomodoros_spent || 0) + completedPomodoros;
-        const isNowComplete = !taskToUpdate.parent_task_id && newPomodorosSpent >= (taskToUpdate.pomodoros_estimated || 1);
 
         const updates = {
             pomodoros_spent: newPomodorosSpent,
-            is_complete: taskToUpdate.is_complete || isNowComplete,
+            // Do NOT auto-complete based on pomodoro count; user checks the box manually.
+            is_complete: taskToUpdate.is_complete,
             updated_at: new Date().toISOString()
         };
 

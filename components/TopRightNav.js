@@ -5,11 +5,12 @@ import Image from 'next/image';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Button } from '@/components/ui/button';
-import { Zap, Bell, Flame, Construction, Cloud, CloudOff } from 'lucide-react'; // Added Cloud icons
+import { Zap, Bell, Flame, Construction, Cloud, CloudOff, Loader2, RefreshCw, WifiOff } from 'lucide-react';
 import AuthButton from './AuthButton';
-import { useSubscription } from '@/context/SubscriptionContext'; // Added Subscription Context
+import { useSubscription } from '@/context/SubscriptionContext';
+import { useAuth } from '@/context/AuthContext'; // Need isMigrating
 
-// Reusable IconButton component for consistency
+// Reusable IconButton component
 const IconButton = ({ src, alt, tooltip, onClick, href }) => {
     const content = (
         <button
@@ -23,18 +24,8 @@ const IconButton = ({ src, alt, tooltip, onClick, href }) => {
     return (
         <TooltipProvider delayDuration={100}>
             <Tooltip>
-                <TooltipTrigger asChild>
-                    {href ? (
-                        <a href={href} target="_blank" rel="noopener noreferrer">
-                            {content}
-                        </a>
-                    ) : (
-                        content
-                    )}
-                </TooltipTrigger>
-                <TooltipContent className="bg-gray-800 text-white border-gray-700">
-                    <p>{tooltip}</p>
-                </TooltipContent>
+                <TooltipTrigger asChild>{href ? <a href={href} target="_blank" rel="noopener noreferrer">{content}</a> : content}</TooltipTrigger>
+                <TooltipContent className="bg-gray-800 text-white border-gray-700"><p>{tooltip}</p></TooltipContent>
             </Tooltip>
         </TooltipProvider>
     );
@@ -44,91 +35,114 @@ export default function TopRightNav() {
     const [isStreakOpen, setIsStreakOpen] = useState(false);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
+    
+    // --- Connectivity State ---
+    const [isOnline, setIsOnline] = useState(true);
 
-    // Get subscription status for the sync indicator
-    const { isPro, loading } = useSubscription();
+    const { isPro, loading: subLoading } = useSubscription();
+    const { isMigrating } = useAuth(); // Migration Spinner State
 
-    // Fullscreen toggle functionality
     const toggleFullScreen = () => {
         if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen().catch((err) => {
-                console.error(`Error attempting to enable full-screen mode: ${err.message} (${err.name})`);
-            });
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
-            }
+            document.documentElement.requestFullscreen().catch((err) => console.error(err));
+        } else if (document.exitFullscreen) {
+            document.exitFullscreen();
         }
     };
 
-    // Effect to listen for fullscreen changes (e.g., user pressing Esc)
     useEffect(() => {
-        const onFullScreenChange = () => {
-            setIsFullscreen(!!document.fullscreenElement);
-        };
+        const onFullScreenChange = () => setIsFullscreen(!!document.fullscreenElement);
         document.addEventListener('fullscreenchange', onFullScreenChange);
-        return () => document.removeEventListener('fullscreenchange', onFullScreenChange);
+        
+        // Online/Offline Listeners
+        if (typeof window !== 'undefined') setIsOnline(navigator.onLine);
+        const setOnline = () => setIsOnline(true);
+        const setOffline = () => setIsOnline(false);
+        window.addEventListener('online', setOnline);
+        window.addEventListener('offline', setOffline);
+
+        return () => {
+            document.removeEventListener('fullscreenchange', onFullScreenChange);
+            window.removeEventListener('online', setOnline);
+            window.removeEventListener('offline', setOffline);
+        };
     }, []);
+
+    // --- RENDER HELPERS ---
+    const renderSyncIcon = () => {
+        // 1. Migration in Progress (Highest Priority)
+        if (isMigrating) {
+            return {
+                icon: <RefreshCw size={20} className="animate-spin text-yellow-400" />,
+                text: "Syncing Data...",
+                style: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
+            };
+        }
+        
+        // 2. Offline State (Paid User)
+        if (isPro && !isOnline) {
+            return {
+                icon: <WifiOff size={20} className="text-yellow-500" />,
+                text: "Sync Pending (Offline)",
+                style: "bg-yellow-900/20 border-yellow-700/50 text-yellow-500 animate-pulse"
+            };
+        }
+
+        // 3. Synced State (Paid User)
+        if (isPro) {
+            return {
+                icon: <Cloud size={20} />,
+                text: "Cloud Sync Active",
+                style: "bg-green-500/10 border-green-500/30 text-green-400"
+            };
+        }
+
+        // 4. Local State (Free/Guest)
+        return {
+            icon: <CloudOff size={20} />,
+            text: "Local Storage (Not Synced)",
+            style: "bg-gray-800/50 border-gray-700 text-gray-500 hover:border-yellow-500/50 hover:text-yellow-500"
+        };
+    };
+
+    const syncStatus = renderSyncIcon();
 
     return (
         <>
             <div className="flex items-center gap-3">
-                {/* --- NEW: Cloud Sync Indicator --- */}
-                {!loading && (
+                {/* --- Sync Indicator --- */}
+                {!subLoading && (
                     <div className="hidden md:block mr-1">
                         <TooltipProvider delayDuration={100}>
                             <Tooltip>
                                 <TooltipTrigger asChild>
-                                    <div className={`p-2 rounded-full border transition-all cursor-help ${isPro ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-gray-800/50 border-gray-700 text-gray-500 hover:border-yellow-500/50 hover:text-yellow-500'}`}>
-                                        {isPro ? <Cloud size={20} /> : <CloudOff size={20} />}
+                                    <div className={`p-2 rounded-full border transition-all cursor-help ${syncStatus.style}`}>
+                                        {syncStatus.icon}
                                     </div>
                                 </TooltipTrigger>
-                                <TooltipContent className="bg-gray-800 text-white border-gray-700">
-                                    <p>{isPro ? "Data Synced to Cloud" : "Local Storage (Not Synced)"}</p>
+                                <TooltipContent className="bg-gray-900 border-gray-700 text-white">
+                                    <p className="font-medium">{syncStatus.text}</p>
+                                    {!isPro && !isMigrating && (
+                                        <p className="text-xs text-gray-400 mt-1">Upgrade to backup data.</p>
+                                    )}
                                 </TooltipContent>
                             </Tooltip>
                         </TooltipProvider>
                     </div>
                 )}
 
-                <IconButton
-                    src="/streak.svg"
-                    alt="Streak"
-                    tooltip="My Streak"
-                    onClick={() => setIsStreakOpen(true)}
-                />
-                <IconButton
-                    src="/notification.svg"
-                    alt="Notifications"
-                    tooltip="Notifications"
-                    onClick={() => setIsNotificationOpen(true)}
-                />
-                <IconButton
-                    src="/bug.svg"
-                    alt="Report Bug"
-                    tooltip="Report a Bug"
-                    href="https://forms.gle/your-bug-report-form-link" // Replace with your Google Form link
-                />
-                <IconButton
-                    src="/feedback.svg"
-                    alt="Feedback"
-                    tooltip="Give Feedback"
-                    href="https://forms.gle/your-feedback-form-link" // Replace with your Google Form link
-                />
-                <IconButton
-                    src="/fullscreen.svg"
-                    alt="Toggle Fullscreen"
-                    tooltip={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'}
-                    onClick={toggleFullScreen}
-                />
+                <IconButton src="/streak.svg" alt="Streak" tooltip="My Streak" onClick={() => setIsStreakOpen(true)} />
+                <IconButton src="/notification.svg" alt="Notifications" tooltip="Notifications" onClick={() => setIsNotificationOpen(true)} />
+                <IconButton src="/bug.svg" alt="Report Bug" tooltip="Report a Bug" href="https://forms.gle/bug-report" />
+                <IconButton src="/feedback.svg" alt="Feedback" tooltip="Give Feedback" href="https://forms.gle/feedback" />
+                <IconButton src="/fullscreen.svg" alt="Toggle Fullscreen" tooltip={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'} onClick={toggleFullScreen} />
 
-                {/* AuthButton is included here */}
                 <div className="pl-2 border-l border-white/20">
                     <AuthButton />
                 </div>
             </div>
 
-            {/* Streak "Coming Soon" Dialog */}
+            {/* Streak Modal (Placeholder) */}
             <Dialog open={isStreakOpen} onOpenChange={setIsStreakOpen}>
                 <DialogContent className="bg-gray-900/80 backdrop-blur-md border-gray-700 text-white max-w-sm">
                     <DialogHeader>
@@ -136,23 +150,21 @@ export default function TopRightNav() {
                             <Flame /> Streak Tracker
                         </DialogTitle>
                         <DialogDescription className="text-center text-gray-300">
-                            This feature is currently under development.
+                            Coming Soon
                         </DialogDescription>
                     </DialogHeader>
                     <div className="my-6 text-center">
                         <Construction size={48} className="mx-auto text-yellow-500 mb-4" />
                         <h3 className="font-semibold text-lg">Work in Progress</h3>
                         <p className="text-sm text-gray-400 mt-2">
-                            We&apos;re building an amazing streak tracker to help you stay motivated and build consistent work habits. Stay tuned!
+                            We&apos;re building an amazing streak tracker to help you stay motivated.
                         </p>
                     </div>
-                    <Button onClick={() => setIsStreakOpen(false)} className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900">
-                        Got It
-                    </Button>
+                    <Button onClick={() => setIsStreakOpen(false)} className="w-full bg-yellow-500 hover:bg-yellow-600 text-gray-900">Got It</Button>
                 </DialogContent>
             </Dialog>
 
-            {/* Notifications Dialog */}
+            {/* Notifications Modal */}
             <Dialog open={isNotificationOpen} onOpenChange={setIsNotificationOpen}>
                 <DialogContent className="bg-gray-900/80 backdrop-blur-md border-gray-700 text-white max-w-md">
                     <DialogHeader>
@@ -161,22 +173,17 @@ export default function TopRightNav() {
                         </DialogTitle>
                     </DialogHeader>
                     <div className="mt-4 space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-                        {/* Notification 1: Welcome Message */}
                         <div className="p-4 bg-black/30 rounded-lg border border-gray-700">
                             <h3 className="font-semibold text-lg text-white mb-2">Welcome to Work Station!</h3>
                             <p className="text-sm text-gray-300 leading-relaxed">
-                                This is your personal focus environment. Use the **Pomodoro Timer** to start a session, manage your tasks in the **Todo List**, and reflect on your day in the **Journal**. Customize your background and sounds in the **Environment** panel to create your perfect workspace.
+                                This is your personal focus environment. Customize your background, track tasks, and journal your progress.
                             </p>
                         </div>
-                        {/* Notification 2: Early Bird Offer */}
                         <div className="p-4 bg-yellow-900/20 rounded-lg border border-yellow-700">
-                            <h3 className="font-semibold text-lg text-yellow-300 mb-2 flex items-center gap-2"><Zap size={20} /> Early Bird Offer Unlocked!</h3>
+                            <h3 className="font-semibold text-lg text-yellow-300 mb-2 flex items-center gap-2"><Zap size={20} /> Early Bird Offer!</h3>
                             <p className="text-sm text-yellow-200/90 leading-relaxed">
-                                As one of our first users, you have access to an exclusive **50% lifetime discount** on our upcoming Premium plan. This includes unlimited cloud sync, advanced analytics, an expanded ambiance library, and much more.
+                                Get a **Lifetime License** for a single one-time payment. Support indie development and own the tool forever.
                             </p>
-                            <Button size="sm" className="mt-4 bg-yellow-500 text-gray-900 hover:bg-yellow-400">
-                                Learn More
-                            </Button>
                         </div>
                     </div>
                 </DialogContent>

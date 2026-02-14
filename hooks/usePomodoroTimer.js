@@ -27,22 +27,22 @@ const DEFAULT_SETTINGS = {
 
 export default function usePomodoroTimer({ onSessionComplete }) {
     // --- State ---
-    const [isStoreLoaded, setIsStoreLoaded] = useState(false); // Prevents "Flash of Default Content"
+    const [isStoreLoaded, setIsStoreLoaded] = useState(false);
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
     const [mode, setMode] = useState('work');
     const [timeLeft, setTimeLeft] = useState(DEFAULT_SETTINGS.workMinutes * 60);
     const [isRunning, setIsRunning] = useState(false);
     const [completedSessions, setCompletedSessions] = useState(0);
 
-    // --- Refs (Mutable "Black Box" for Cleanup & Loop) ---
+    // --- Refs ---
     const onSessionCompleteRef = useRef(onSessionComplete);
     const alarmRef = useRef(null);
     const endTimeRef = useRef(null);
     
     // Core Refs for Logic
-    const initialTimeRef = useRef(DEFAULT_SETTINGS.workMinutes * 60); // Total duration of current session (for Ring calc)
-    const timeLeftRef = useRef(DEFAULT_SETTINGS.workMinutes * 60);    // Current remaining seconds
-    const modeRef = useRef('work');                                   // Current mode
+    const initialTimeRef = useRef(DEFAULT_SETTINGS.workMinutes * 60);
+    const timeLeftRef = useRef(DEFAULT_SETTINGS.workMinutes * 60);
+    const modeRef = useRef('work');
 
     // --- Helpers ---
     const getTimeForMode = useCallback((m, currentSettings = settings) => {
@@ -53,7 +53,7 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         }
     }, [settings]);
 
-    // --- 1. Initialization & Hydration (The "Flash" Fix) ---
+    // --- 1. Initialization & Hydration ---
     useEffect(() => {
         if (typeof window === 'undefined') return;
 
@@ -67,7 +67,7 @@ export default function usePomodoroTimer({ onSessionComplete }) {
             } catch (e) { console.error("Settings parse error", e); }
         }
 
-        // B. Load State (Persistence)
+        // B. Load State
         const savedState = localStorage.getItem('pomodoro_state');
         if (savedState) {
             try {
@@ -77,19 +77,15 @@ export default function usePomodoroTimer({ onSessionComplete }) {
                     timeLeft: savedTimeLeft, 
                     isRunning: wasRunning, 
                     targetEndTime, 
-                    initialDuration // <--- CRITICAL FIX: Restore the denominator for the ring
+                    initialDuration 
                 } = parsed;
 
-                // 1. Restore Mode
                 setMode(savedMode);
                 modeRef.current = savedMode;
 
-                // 2. Restore Initial Duration (Fixes Ring Glitch)
-                // If missing (legacy data), fallback to settings
                 const totalDuration = initialDuration || getTimeForMode(savedMode, currentSettings);
                 initialTimeRef.current = totalDuration;
 
-                // 3. Calculate Drift (Fixes Time Accuracy)
                 let newTimeLeft = savedTimeLeft;
                 if (wasRunning && targetEndTime) {
                     const now = Date.now();
@@ -97,7 +93,6 @@ export default function usePomodoroTimer({ onSessionComplete }) {
                     newTimeLeft = secondsRemaining > 0 ? secondsRemaining : 0;
                 }
 
-                // 4. Apply State
                 setTimeLeft(newTimeLeft);
                 timeLeftRef.current = newTimeLeft;
                 
@@ -105,37 +100,30 @@ export default function usePomodoroTimer({ onSessionComplete }) {
                     setIsRunning(true);
                     endTimeRef.current = Date.now() + (newTimeLeft * 1000);
                 } else if (newTimeLeft <= 0 && wasRunning) {
-                    // Timer finished while tab was closed
                     setIsRunning(false);
                     setTimeLeft(0);
                 } else {
-                    // Was paused
                     setIsRunning(false);
                 }
 
             } catch (e) { console.error("State restore error", e); }
         } else {
-            // No saved state? Init fresh based on loaded settings
             const startDuration = getTimeForMode('work', currentSettings);
             setTimeLeft(startDuration);
             timeLeftRef.current = startDuration;
             initialTimeRef.current = startDuration;
         }
 
-        // C. Init Audio & Permissions
         alarmRef.current = new Audio();
         requestNotificationPermission();
-
-        // D. Mark Ready (Allows UI to render)
         setIsStoreLoaded(true);
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []); // Run ONCE on mount
+    }, []); 
 
-    // Update Ref when callback changes
     useEffect(() => { onSessionCompleteRef.current = onSessionComplete; }, [onSessionComplete]);
 
-    // --- 2. Persistence Loop (Save State Every Change) ---
+    // --- 2. Persistence Loop ---
     useEffect(() => {
         if (!isStoreLoaded || typeof window === 'undefined') return;
 
@@ -144,18 +132,16 @@ export default function usePomodoroTimer({ onSessionComplete }) {
             timeLeft,
             isRunning,
             targetEndTime: isRunning && endTimeRef.current ? endTimeRef.current : null,
-            initialDuration: initialTimeRef.current, // <--- Saving this fixes the ring on refresh
+            initialDuration: initialTimeRef.current,
             lastUpdated: Date.now()
         };
         localStorage.setItem('pomodoro_state', JSON.stringify(stateToSave));
         
-        // Sync Refs (Architecture: State drives UI, Refs drive Logic)
         timeLeftRef.current = timeLeft;
         modeRef.current = mode;
 
     }, [mode, timeLeft, isRunning, isStoreLoaded]);
 
-    // Save settings when changed
     useEffect(() => {
         if (isStoreLoaded) localStorage.setItem('pomodoro_settings', JSON.stringify(settings));
     }, [settings, isStoreLoaded]);
@@ -163,7 +149,7 @@ export default function usePomodoroTimer({ onSessionComplete }) {
 
     // --- 3. Timer Engine ---
     const handleSessionEnd = useCallback((wasSkipped = false) => {
-        const sessionWasWork = modeRef.current === 'work'; // Read from Ref for safety
+        const sessionWasWork = modeRef.current === 'work';
         const totalDuration = initialTimeRef.current;
         const currentLeft = timeLeftRef.current;
         
@@ -171,7 +157,6 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         const elapsedMinutes = Math.floor(elapsedSeconds / 60);
 
         if (!wasSkipped) {
-            // Audio & Notification
             if (alarmRef.current) {
                 alarmRef.current.src = `/sounds/${settings.alarmSound}`;
                 alarmRef.current.volume = settings.volume || 1;
@@ -182,12 +167,10 @@ export default function usePomodoroTimer({ onSessionComplete }) {
             }
         }
 
-        // Log Session
         if (onSessionCompleteRef.current && elapsedMinutes > 0) {
             onSessionCompleteRef.current({ sessionWasWork, duration: elapsedMinutes });
         }
 
-        // Calculate Next Mode
         let nextMode = 'work';
         if (sessionWasWork && !wasSkipped) {
             const newCompleted = completedSessions + 1;
@@ -195,7 +178,6 @@ export default function usePomodoroTimer({ onSessionComplete }) {
             nextMode = (newCompleted > 0 && newCompleted % settings.longBreakInterval === 0) ? 'longBreak' : 'break';
         }
 
-        // Transition
         const nextTime = getTimeForMode(nextMode);
         
         setMode(nextMode);
@@ -204,9 +186,8 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         setTimeLeft(nextTime);
         timeLeftRef.current = nextTime;
         
-        initialTimeRef.current = nextTime; // Reset ring denominator
+        initialTimeRef.current = nextTime;
 
-        // Auto-Start Check
         const shouldAutoStart = !wasSkipped && (
             (sessionWasWork && settings.autoStartBreaks) || 
             (!sessionWasWork && settings.autoStartPomodoros)
@@ -230,6 +211,13 @@ export default function usePomodoroTimer({ onSessionComplete }) {
                 const remaining = Math.max(0, Math.ceil(difference / 1000));
 
                 setTimeLeft(remaining);
+
+                // --- NEW: 5-Minute Warning ---
+                // Trigger only if exactly 300s (5m) remain AND the total session was > 5m
+                if (remaining === 300 && initialTimeRef.current > 300) {
+                     showNotification("5 Minutes Left", "Time to wrap up!");
+                }
+
                 if (remaining <= 0) {
                     clearInterval(interval);
                     handleSessionEnd(false);
@@ -250,7 +238,6 @@ export default function usePomodoroTimer({ onSessionComplete }) {
     const pauseTimer = () => setIsRunning(false);
 
     const resetTimer = () => {
-        // Log partial if work session
         if (mode === 'work') {
             const elapsed = Math.floor((initialTimeRef.current - timeLeft) / 60);
             if (elapsed > 0 && onSessionCompleteRef.current) {
@@ -261,17 +248,16 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         setIsRunning(false);
         const t = getTimeForMode(mode);
         setTimeLeft(t);
-        initialTimeRef.current = t; // Reset ring
+        initialTimeRef.current = t;
         timeLeftRef.current = t;
         
-        // Clear persistence for a clean slate
         localStorage.removeItem('pomodoro_state');
     };
 
     const skipMode = () => handleSessionEnd(true);
 
     const switchMode = (newMode) => {
-        if (isRunning) return; // Prevent accidental switches while running
+        if (isRunning) return; 
         const t = getTimeForMode(newMode);
         setMode(newMode);
         setTimeLeft(t);
@@ -281,11 +267,8 @@ export default function usePomodoroTimer({ onSessionComplete }) {
     
     const updateSettings = (newSettings) => {
         setSettings(prev => ({ ...prev, ...newSettings }));
-        // Note: We don't auto-reset timer here to be non-intrusive, 
-        // unless they explicitly reset.
     };
 
-    // Calculate Progress (Safety check for divide by zero)
     const progress = initialTimeRef.current > 0 
         ? ((initialTimeRef.current - timeLeft) / initialTimeRef.current) * 100 
         : 0;
@@ -300,7 +283,7 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         return () => { document.title = "Work Station"; };
     }, [timeLeft, mode, isStoreLoaded]);
 
-    // Save on Unmount (Cleanup Guard)
+    // Save on Unmount
     useEffect(() => {
         return () => {
             const cMode = modeRef.current;
@@ -316,8 +299,35 @@ export default function usePomodoroTimer({ onSessionComplete }) {
         };
     }, []);
 
+    useEffect(() => {
+        const event = new CustomEvent('sys-timer-status', { 
+            detail: { isRunning } 
+        });
+        window.dispatchEvent(event);
+    }, [isRunning]);
+
+    // --- 6. UX: Detect Tab Sleep ---
+    useEffect(() => {
+        if (!isRunning) return;
+
+        let lastTick = Date.now();
+        const driftCheckInterval = setInterval(() => {
+            const now = Date.now();
+            const delta = now - lastTick;
+            
+            // If gap > 2000ms, tab was asleep.
+            if (delta > 2000) {
+                // REMOVED: showNotification("Timer Synced"...)
+                // The math updates automatically via endTimeRef in the main loop.
+            }
+            lastTick = now;
+        }, 1000);
+
+        return () => clearInterval(driftCheckInterval);
+    }, [isRunning]);
+
     return {
-        isStoreLoaded, // <--- Exposed for UI handling
+        isStoreLoaded,
         timeLeft, 
         isRunning, 
         mode, 

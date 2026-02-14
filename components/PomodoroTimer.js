@@ -34,6 +34,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     const [linkedTask, setLinkedTask] = useState(null);
     const [isMinimized, setIsMinimized] = useState(false);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const LINKED_TASK_STORAGE_KEY = 'pomodoro_linked_task';
 
     // Draggable State
     const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -46,6 +47,27 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     const linkedTaskRef = useRef(linkedTask);
 
     useEffect(() => { linkedTaskRef.current = linkedTask; }, [linkedTask]);
+
+    // Restore linked task across refreshes (prevents "refresh amnesia")
+    useEffect(() => {
+        if (!isOpen || typeof window === 'undefined') return;
+        try {
+            const raw = localStorage.getItem(LINKED_TASK_STORAGE_KEY);
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.id) setLinkedTask(parsed);
+        } catch {
+            // ignore corrupted storage
+        }
+         
+    }, [isOpen]);
+
+    // Persist linked task whenever it changes
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        if (linkedTask) localStorage.setItem(LINKED_TASK_STORAGE_KEY, JSON.stringify(linkedTask));
+        else localStorage.removeItem(LINKED_TASK_STORAGE_KEY);
+    }, [linkedTask]);
 
     const handleSessionComplete = useCallback(({ sessionWasWork, duration }) => {
         if (sessionWasWork && duration > 0) {
