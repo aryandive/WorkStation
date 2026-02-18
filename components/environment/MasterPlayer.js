@@ -113,7 +113,6 @@ export default function MasterPlayer() {
                     style={{ backgroundColor: '#0f0f0f' }} 
                 >
                      <Image
-                        // SAFETY LAYER 2: Try the path, fallback to local placeholder if empty
                         src={activeScene.thumbnail || activeScene.path || '/placeholder.webp'}
                         alt="Background Ambience"
                         fill
@@ -123,7 +122,7 @@ export default function MasterPlayer() {
                         className="object-cover"
                         draggable={false}
                         onError={(e) => {
-                            e.target.src = '/placeholder.webp'; // Ensure you have a public/placeholder.webp
+                            e.target.src = '/placeholder.webp';
                             e.target.srcset = '/placeholder.webp';
                         }}
                     />
