@@ -340,11 +340,26 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
             <DialogContent className="max-w-4xl h-[70vh] bg-gray-900 text-white border-gray-700 flex p-0">
                 <aside className="w-1/4 bg-gray-950/50 border-r border-gray-800 p-4 flex flex-col">
                     <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Folder size={20} /> Projects</h2>
-                    <div className="flex-grow overflow-y-auto custom-scrollbar">
+                    {/* Fixed scrollable container */}
+                    <div className="flex-grow overflow-y-auto custom-scrollbar min-h-0">
                         {projects.map(p => (
                             <div key={p.id} className="flex items-center group">
-                                <button onClick={() => setActiveProjectId(p.id)} className={cn("w-full text-left p-2 rounded mb-1 truncate", activeProjectId === p.id ? 'bg-yellow-500/20 text-yellow-400' : 'hover:bg-gray-800')}>{p.name}</button>
-                                {projects.length > 1 && <Button onClick={() => deleteProject(p.id)} variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-500/20"><X size={16} /></Button>}
+                                <button 
+                                    onClick={() => setActiveProjectId(p.id)} 
+                                    className={cn("w-full text-left p-2 rounded mb-1 truncate", activeProjectId === p.id ? 'bg-yellow-500/20 text-yellow-400' : 'hover:bg-gray-800')}
+                                >
+                                    {p.name}
+                                </button>
+                                {projects.length > 1 && (
+                                    <Button 
+                                        onClick={() => deleteProject(p.id)} 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-500/20"
+                                    >
+                                        <X size={16} />
+                                    </Button>
+                                )}
                             </div>
                         ))}
                     </div>
