@@ -1,6 +1,7 @@
 // app/sitemap.js
 export default function sitemap() {
-    // const baseUrl = 'https://your-domain.vercel.app'; // Update this
+    // const baseUrl = 'https://workstationfocus.com';  // Update this
+    const baseUrl = 'https://work-station-ten.vercel.app/';  // Update this
   
     return [
       {
