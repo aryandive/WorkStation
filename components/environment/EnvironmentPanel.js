@@ -16,9 +16,12 @@ import {
     ChevronDown, ChevronUp, LayoutGrid, Image as LucideImage, Plus, HardDrive, AlertCircle, Wifi, ArrowDownToLine
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { createClient } from '@/utils/supabase/client';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ANIMATED_SCENES, STATIC_CATEGORIES, STATIC_IMAGES } from '@/lib/environmentConfig';d
+import { ANIMATED_SCENES, STATIC_CATEGORIES, STATIC_IMAGES } from '@/lib/environmentConfig';
+import { ASSET_TIERS } from '@/lib/environmentAssets';
+import { PremiumGate } from '@/components/system/PremiumGate';
+import { useAccess } from '@/hooks/useAccess';
+import { createClient } from '@/utils/supabase/client';
 
 // --- IndexedDB Helpers ---
 const DB_NAME = 'EnvironmentAssetsDB';
@@ -232,6 +235,8 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
         setYoutubeShowPlayer, setYoutubeMute, setYoutubeShowControls, loadingSounds
     } = useEnvironment();
 
+    const { getCurrentTier } = useAccess();
+
     const [activeTab, setActiveTab] = useState('scenes');
     const [youtubeUrl, setYoutubeUrl] = useState('');
     const [youtubeError, setYoutubeError] = useState('');
@@ -265,6 +270,48 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
         setStudyTipAtBottom(savedStudyTip);
         setPreferencesLoaded(true);
     }, []);
+
+    // --- NEW: Entitlement Auditor (Graceful Degradation) ---
+    useEffect(() => {
+        // Find the fallback static background for Tier 0
+        const TIER_0_FALLBACK = '/wallpaper/nature/pexels-pixabay-33109.webp';
+
+        const auditorCheck = () => {
+            if (!activeScene) return;
+
+            // 1. Determine what the active scene is (either videoId or path)
+            let currentAssetId = activeScene.path || activeScene.videoId;
+            let currentCategory = activeScene.type === 'video' || (activeScene.type === 'image' && activeScene.path.startsWith('blob:')) ? 'custom' : 'scene';
+
+            let lookupId = currentAssetId;
+
+            // We need to do a reverse lookup if the path isn't the direct key (which it often isn't for scenes)
+            if (ASSET_TIERS[lookupId] === undefined) {
+                // Need to scan ANIMATED_SCENES and STATIC_IMAGES to find the ID based on path/videoId
+                const animMatch = ANIMATED_SCENES.find(a => a.videoId === currentAssetId);
+                if (animMatch) {
+                    lookupId = animMatch.id;
+                } else {
+                    const staticMatch = STATIC_IMAGES.find(s => s.src === currentAssetId);
+                    if (staticMatch) {
+                        lookupId = staticMatch.id;
+                    }
+                }
+            }
+
+            // Extract the required tier
+            const requiredTier = ASSET_TIERS.getTier(lookupId, currentCategory);
+            const userTier = getCurrentTier();
+
+            // 2. If they are in a state they shouldn't be, gracefully reset
+            if (requiredTier > userTier) {
+                console.warn(`Entitlement Auditor: Active scene requires Tier ${requiredTier}, but user is Tier ${userTier}. Resetting.`);
+                playScene({ type: 'image', path: TIER_0_FALLBACK });
+            }
+        };
+
+        auditorCheck();
+    }, [getCurrentTier, activeScene, playScene]);
 
     // Handlers for Dismissing Banners
     const dismissDataDisclaimer = () => {
@@ -551,20 +598,22 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     {displayedAnimatedScenes.map(scene => (
                                         <div key={scene.id} className="relative group">
-                                            <SceneButton
-                                                scene={scene}
-                                                isActive={
-                                                    (scene.videoId && activeScene.videoId === scene.videoId) ||
-                                                    (scene.url && activeScene.path === scene.url)
-                                                }
-                                                onClick={() => {
-                                                    if (scene.type === 'youtube-scene') {
-                                                        playScene({ type: 'youtube-scene', videoId: scene.videoId, path: null });
-                                                    } else {
-                                                        playScene({ type: 'video', path: scene.url });
+                                            <PremiumGate featureKey="animated_scenes" requiredTier={ASSET_TIERS.getTier(scene.videoId || scene.url, 'scene')}>
+                                                <SceneButton
+                                                    scene={scene}
+                                                    isActive={
+                                                        (scene.videoId && activeScene.videoId === scene.videoId) ||
+                                                        (scene.url && activeScene.path === scene.url)
                                                     }
-                                                }}
-                                            />
+                                                    onClick={() => {
+                                                        if (scene.type === 'youtube-scene') {
+                                                            playScene({ type: 'youtube-scene', videoId: scene.videoId, path: null });
+                                                        } else {
+                                                            playScene({ type: 'video', path: scene.url });
+                                                        }
+                                                    }}
+                                                />
+                                            </PremiumGate>
                                             {scene.type === 'video' && (
                                                 <button
                                                     onClick={(e) => handleDeleteCustom('video', scene.id)}
@@ -580,14 +629,14 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-yellow-400 hover:text-yellow-400 hover:bg-gray-800 transition-all aspect-[16/9]">
+                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-yellow-400 hover:text-yellow-400 hover:bg-gray-800 transition-all aspect-[16/9] w-full h-full">
                                                         {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
                                                         <span className="text-xs font-medium">Import Video</span>
                                                         <span className="text-[10px] opacity-70">Max 5</span>
                                                         <input type="file" accept="video/*" className="hidden" onChange={handleSceneUpload} disabled={isUploading} />
                                                     </label>
                                                 </TooltipTrigger>
-                                                <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs">
+                                                <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs z-[100]">
                                                     <p>Local videos are stored in your browser.</p>
                                                 </TooltipContent>
                                             </Tooltip>
@@ -620,44 +669,54 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                     ))}
                                 </div>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    {activeImageCategory === 'custom' && getCurrentTier() >= 2 && (
+                                        <div className="col-span-full mb-2 bg-yellow-900/20 border border-yellow-500/20 p-3 rounded-lg text-xs text-yellow-200/80">
+                                            Note: Custom imports are saved in local browser storage and may be lost if cache is cleared.
+                                        </div>
+                                    )}
                                     {activeImageCategory === 'custom' && customImages.length < MAX_CUSTOM_IMAGES && (
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-blue-400 hover:text-blue-400 hover:bg-gray-800 transition-all aspect-[16/9]">
+                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-blue-400 hover:text-blue-400 hover:bg-gray-800 transition-all aspect-[16/9] w-full h-full">
                                                         {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
                                                         <span className="text-xs font-medium">Import Image</span>
                                                         <span className="text-[10px] opacity-70">Max 12</span>
                                                         <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
                                                     </label>
                                                 </TooltipTrigger>
-                                                <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs">
+                                                <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs z-[100]">
                                                     <p>Local images are stored in your browser.</p>
                                                 </TooltipContent>
                                             </Tooltip>
                                         </TooltipProvider>
                                     )}
-                                    {(activeImageCategory === 'custom' ? customImages : filteredImages).map((img, idx) => (
-                                        <div key={img.id || idx} className="relative group">
-                                            <SceneButton
-                                                scene={{
-                                                    ...img,
-                                                    type: 'image',
-                                                    thumbnail: activeImageCategory === 'custom' ? img.url : img.src
-                                                }}
-                                                isActive={activeScene.path === (activeImageCategory === 'custom' ? img.url : img.src)}
-                                                onClick={() => playScene({ type: 'image', path: activeImageCategory === 'custom' ? img.url : img.src })}
-                                            />
-                                            {activeImageCategory === 'custom' && (
-                                                <button
-                                                    onClick={(e) => handleDeleteCustom('image', img.id)}
-                                                    className="absolute top-1 right-1 p-1.5 bg-red-600/90 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
-                                                >
-                                                    <Trash2 size={12} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    ))}
+                                    {(activeImageCategory === 'custom' ? customImages : filteredImages).map((img, idx) => {
+                                        const requiredTier = activeImageCategory === 'custom' ? 2 : ASSET_TIERS.getTier(img.id, 'image');
+                                        return (
+                                            <div key={img.id || idx} className="relative group">
+                                                <PremiumGate featureKey="premium_wallpaper" requiredTier={requiredTier}>
+                                                    <SceneButton
+                                                        scene={{
+                                                            ...img,
+                                                            type: 'image',
+                                                            thumbnail: activeImageCategory === 'custom' ? img.url : img.src
+                                                        }}
+                                                        isActive={activeScene.path === (activeImageCategory === 'custom' ? img.url : img.src)}
+                                                        onClick={() => playScene({ type: 'image', path: activeImageCategory === 'custom' ? img.url : img.src })}
+                                                    />
+                                                </PremiumGate>
+                                                {activeImageCategory === 'custom' && (
+                                                    <button
+                                                        onClick={(e) => handleDeleteCustom('image', img.id)}
+                                                        className="absolute top-1 right-1 p-1.5 bg-red-600/90 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
 
@@ -685,148 +744,160 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     {curatedYoutube.map(yt => {
                                         const id = typeof getYoutubeId === 'function' ? getYoutubeId(yt.url) : localGetYoutubeId(yt.url);
+                                        const requiredTier = ASSET_TIERS.getTier('youtube_curated');
                                         return (
-                                            <SceneButton
-                                                key={yt.url}
-                                                scene={{ ...yt, type: 'youtube' }}
-                                                isActive={youtube.id === id}
-                                                onClick={() => playYoutube(yt.url, { isCustom: false })}
-                                            />
+                                            <PremiumGate key={yt.url} featureKey="premium_youtube" requiredTier={requiredTier}>
+                                                <SceneButton
+                                                    scene={{ ...yt, type: 'youtube' }}
+                                                    isActive={youtube.id === id}
+                                                    onClick={() => playYoutube(yt.url, { isCustom: false })}
+                                                />
+                                            </PremiumGate>
                                         );
                                     })}
 
-                                    <button
-                                        onClick={() => {
-                                            const librarySection = document.getElementById('custom-library-section');
-                                            if (librarySection) librarySection.scrollIntoView({ behavior: 'smooth' });
-                                        }}
-                                        className="rounded-lg border-2 border-dashed border-gray-700 transition-all group flex flex-col items-center justify-center relative aspect-[16/9] hover:bg-gray-800"
-                                    >
-                                        <div className="p-3 rounded-full mb-2 bg-gray-800 text-gray-400 group-hover:bg-gray-700 transition-colors">
-                                            <Bookmark size={24} />
-                                        </div>
-                                        <p className="text-xs font-medium text-gray-400 group-hover:text-white">Scroll to Library</p>
-                                    </button>
+                                    <PremiumGate featureKey="premium_youtube" requiredTier={ASSET_TIERS.getTier('youtube_library')}>
+                                        <button
+                                            onClick={() => {
+                                                const librarySection = document.getElementById('custom-library-section');
+                                                if (librarySection) librarySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                            }}
+                                            className="rounded-lg border-2 border-dashed border-gray-700 transition-all group flex flex-col items-center justify-center relative aspect-[16/9] hover:bg-gray-800 w-full h-full"
+                                        >
+                                            <div className="p-3 rounded-full mb-2 bg-gray-800 text-gray-400 group-hover:bg-gray-700 transition-colors">
+                                                <Bookmark size={24} />
+                                            </div>
+                                            <p className="text-xs font-medium text-gray-400 group-hover:text-white">Scroll to Library</p>
+                                        </button>
+                                    </PremiumGate>
                                 </div>
                             </div>
 
                             {/* Custom Video & Library Section */}
                             <div id="custom-library-section" className="pt-4 border-t border-gray-700">
-                                <div className="flex items-center justify-between mb-3">
-                                    <h4 className="font-semibold text-gray-300 flex items-center gap-2">
-                                        <LinkIcon size={16} /> Custom Video Source
-                                    </h4>
-                                    <span className={cn("text-xs px-2 py-0.5 rounded-full border",
-                                        savedVideos.length >= MAX_SAVED_VIDEOS ? "border-red-500 text-red-400" : "border-gray-700 text-gray-400"
-                                    )}>
-                                        Library: {savedVideos.length} / {MAX_SAVED_VIDEOS}
-                                    </span>
-                                </div>
-
-                                <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700 space-y-4">
-                                    <div className="flex gap-2">
-                                        <div className="relative flex-1">
-                                            <Input
-                                                placeholder="Paste any YouTube URL..."
-                                                value={youtubeUrl}
-                                                onChange={(e) => { setYoutubeUrl(e.target.value); setYoutubeError(''); }}
-                                                className={cn("bg-gray-900/50 border-gray-600 pl-9", youtubeError && "border-red-500 focus-visible:ring-red-500")}
-                                            />
-                                            <Youtube className="absolute left-3 top-2.5 text-gray-500 h-4 w-4" />
-                                        </div>
-
-                                        <TooltipProvider>
-                                            <Tooltip>
-                                                <TooltipTrigger asChild>
-                                                    <Button
-                                                        onClick={handleSaveToLibrary}
-                                                        variant="secondary"
-                                                        disabled={isSaving || savedVideos.length >= MAX_SAVED_VIDEOS}
-                                                        className={cn("gap-2", savedVideos.length >= MAX_SAVED_VIDEOS && "opacity-50 cursor-not-allowed")}
-                                                    >
-                                                        {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Bookmark size={16} />}
-                                                    </Button>
-                                                </TooltipTrigger>
-                                                {savedVideos.length >= MAX_SAVED_VIDEOS && (
-                                                    <TooltipContent><p>Limit Reached</p></TooltipContent>
-                                                )}
-                                            </Tooltip>
-                                        </TooltipProvider>
-
-                                        <Button
-                                            onClick={() => handleYoutubePlay(youtubeUrl)}
-                                            className="bg-red-600 hover:bg-red-700 text-white gap-2 font-semibold"
-                                        >
-                                            <Play size={16} fill="currentColor" /> Load
-                                        </Button>
+                                <PremiumGate featureKey="premium_youtube" requiredTier={ASSET_TIERS.getTier('youtube_custom')} hideLock={true}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="font-semibold text-gray-300 flex items-center gap-2">
+                                            <LinkIcon size={16} /> Custom Video Source
+                                            {getCurrentTier() < ASSET_TIERS.getTier('youtube_custom') && (
+                                                <div className="bg-black/60 backdrop-blur-md p-1 rounded-full shadow-lg border border-white/10 flex items-center justify-center ml-1">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-yellow-400 drop-shadow-md">
+                                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                                                    </svg>
+                                                </div>
+                                            )}
+                                        </h4>
+                                        <span className={cn("text-xs px-2 py-0.5 rounded-full border",
+                                            savedVideos.length >= MAX_SAVED_VIDEOS ? "border-red-500 text-red-400" : "border-gray-700 text-gray-400"
+                                        )}>
+                                            Library: {savedVideos.length} / {MAX_SAVED_VIDEOS}
+                                        </span>
                                     </div>
-                                    {youtubeError && (
-                                        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-950/30 p-2 rounded-md border border-red-900/50 animate-in fade-in slide-in-from-top-1">
-                                            <AlertCircle size={14} /> {youtubeError}
-                                        </div>
-                                    )}
 
-                                    {/* Saved Library Grid */}
-                                    {savedVideos.length > 0 && (
-                                        <div className="mt-4 pt-4 border-t border-gray-700/50">
-                                            <h5 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Your Saved Videos</h5>
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                                                {savedVideos.map(vid => (
-                                                    <div key={vid.id} className="relative group">
-                                                        <SceneButton
-                                                            scene={{ ...vid, name: vid.title, type: 'youtube' }}
-                                                            isActive={youtube.id === vid.video_id}
-                                                            onClick={() => playYoutube(vid.url, { isCustom: false })}
-                                                        />
-                                                        {/* FIXED DELETE BUTTON (Z-Index 50) */}
-                                                        <button
-                                                            onClick={(e) => handleDeleteFromLibrary(vid.id, e)}
-                                                            className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-red-600 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-50 cursor-pointer"
-                                                            title="Delete from Library"
+                                    <div className="bg-gray-800/40 rounded-xl p-4 border border-gray-700 space-y-4">
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <Input
+                                                    placeholder="Paste any YouTube URL..."
+                                                    value={youtubeUrl}
+                                                    onChange={(e) => { setYoutubeUrl(e.target.value); setYoutubeError(''); }}
+                                                    className={cn("bg-gray-900/50 border-gray-600 pl-9", youtubeError && "border-red-500 focus-visible:ring-red-500")}
+                                                />
+                                                <Youtube className="absolute left-3 top-2.5 text-gray-500 h-4 w-4" />
+                                            </div>
+
+                                            <TooltipProvider>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <Button
+                                                            onClick={handleSaveToLibrary}
+                                                            variant="secondary"
+                                                            disabled={isSaving || savedVideos.length >= MAX_SAVED_VIDEOS}
+                                                            className={cn("gap-2", savedVideos.length >= MAX_SAVED_VIDEOS && "opacity-50 cursor-not-allowed")}
                                                         >
-                                                            <Trash2 size={14} />
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                                                            {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Bookmark size={16} />}
+                                                        </Button>
+                                                    </TooltipTrigger>
+                                                    {savedVideos.length >= MAX_SAVED_VIDEOS && (
+                                                        <TooltipContent><p>Limit Reached</p></TooltipContent>
+                                                    )}
+                                                </Tooltip>
+                                            </TooltipProvider>
 
-                                    {/* YouTube Controls */}
-                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 bg-gray-900/50 rounded-lg mt-2">
-                                        <div className="flex items-center justify-between gap-2 px-2">
-                                            <div className="flex items-center gap-2 text-sm text-gray-400">
-                                                <Monitor size={16} /> <Label htmlFor="show-player" className="cursor-pointer">Video</Label>
-                                            </div>
-                                            <Switch id="show-player" checked={youtube.showPlayer} onCheckedChange={setYoutubeShowPlayer} />
+                                            <Button
+                                                onClick={() => handleYoutubePlay(youtubeUrl)}
+                                                className="bg-red-600 hover:bg-red-700 text-white gap-2 font-semibold"
+                                            >
+                                                <Play size={16} fill="currentColor" /> Load
+                                            </Button>
                                         </div>
-
-                                        <div className="flex items-center justify-between gap-2 px-2 border-l-0 sm:border-l border-gray-700">
-                                            <div className="flex items-center gap-2 text-sm text-gray-400">
-                                                {youtube.isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                                                <Label htmlFor="mute-yt" className="cursor-pointer">Muted</Label>
+                                        {youtubeError && (
+                                            <div className="flex items-center gap-2 text-xs text-red-400 bg-red-950/30 p-2 rounded-md border border-red-900/50 animate-in fade-in slide-in-from-top-1">
+                                                <AlertCircle size={14} /> {youtubeError}
                                             </div>
-                                            <Switch id="mute-yt" checked={youtube.isMuted} onCheckedChange={setYoutubeMute} />
-                                        </div>
+                                        )}
 
-                                        <div className="flex items-center justify-between gap-2 px-2 border-l-0 sm:border-l border-gray-700">
-                                            <div className="flex items-center gap-2 text-sm text-gray-400">
-                                                <Settings2 size={16} />
-                                                <Label htmlFor="controls-yt" className="cursor-pointer">Controls</Label>
+                                        {/* Saved Library Grid */}
+                                        {savedVideos.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-gray-700/50">
+                                                <h5 className="text-xs font-semibold text-gray-400 mb-2 uppercase tracking-wider">Your Saved Videos</h5>
+                                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                                    {savedVideos.map(vid => (
+                                                        <div key={vid.id} className="relative group">
+                                                            <SceneButton
+                                                                scene={{ ...vid, name: vid.title, type: 'youtube' }}
+                                                                isActive={youtube.id === vid.video_id}
+                                                                onClick={() => playYoutube(vid.url, { isCustom: false })}
+                                                            />
+                                                            {/* FIXED DELETE BUTTON (Z-Index 50) */}
+                                                            <button
+                                                                onClick={(e) => handleDeleteFromLibrary(vid.id, e)}
+                                                                className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-red-600 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-50 cursor-pointer"
+                                                                title="Delete from Library"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
                                             </div>
-                                            <Switch id="controls-yt" checked={youtube.showControls} onCheckedChange={setYoutubeShowControls} />
+                                        )}
+
+                                        {/* YouTube Controls */}
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-3 bg-gray-900/50 rounded-lg mt-2">
+                                            <div className="flex items-center justify-between gap-2 px-2">
+                                                <div className="flex items-center gap-2 text-sm text-gray-400">
+                                                    <Monitor size={16} /> <Label htmlFor="show-player" className="cursor-pointer">Video</Label>
+                                                </div>
+                                                <Switch id="show-player" checked={youtube.showPlayer} onCheckedChange={setYoutubeShowPlayer} />
+                                            </div>
+
+                                            <div className="flex items-center justify-between gap-2 px-2 border-l-0 sm:border-l border-gray-700">
+                                                <div className="flex items-center gap-2 text-sm text-gray-400">
+                                                    {youtube.isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                                                    <Label htmlFor="mute-yt" className="cursor-pointer">Muted</Label>
+                                                </div>
+                                                <Switch id="mute-yt" checked={youtube.isMuted} onCheckedChange={setYoutubeMute} />
+                                            </div>
+
+                                            <div className="flex items-center justify-between gap-2 px-2 border-l-0 sm:border-l border-gray-700">
+                                                <div className="flex items-center gap-2 text-sm text-gray-400">
+                                                    <Settings2 size={16} />
+                                                    <Label htmlFor="controls-yt" className="cursor-pointer">Controls</Label>
+                                                </div>
+                                                <Switch id="controls-yt" checked={youtube.showControls} onCheckedChange={setYoutubeShowControls} />
+                                            </div>
                                         </div>
                                     </div>
 
                                     {youtube.id && (
-                                        <Button onClick={stopYoutube} variant="outline" size="sm" className="w-full border-red-500/20 text-red-400 hover:bg-red-500/10 hover:text-red-300">
+                                        <Button onClick={stopYoutube} variant="outline" size="sm" className="w-full border-red-500/20 text-red-400 hover:bg-red-500/10 hover:text-red-300 mt-2">
                                             Stop YouTube Playback
                                         </Button>
                                     )}
-                                </div>
+                                </PremiumGate>
                             </div>
-
-                            {/* BOTTOM BANNERS (Render if docked) */}
                             {preferencesLoaded && studyTipAtBottom && (
                                 <StudyModeTip isBottom={true} onDismiss={null} />
                             )}
@@ -834,79 +905,84 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                 <HighDataDisclaimer isBottom={true} onDismiss={null} />
                             )}
                         </div>
-                    )}
+                    )
+                    }
 
                     {/* --- TAB 3: SOUNDSCAPES --- */}
-                    {activeTab === 'soundscapes' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
-                                <div className="p-2 bg-blue-500/10 rounded-lg">
-                                    <Sparkles className="w-5 h-5 text-blue-400" />
+                    {
+                        activeTab === 'soundscapes' && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-500/20 rounded-xl p-4 flex items-start gap-3">
+                                    <div className="p-2 bg-blue-500/10 rounded-lg">
+                                        <Sparkles className="w-5 h-5 text-blue-400" />
+                                    </div>
+                                    <div className="text-sm text-gray-300">
+                                        <h4 className="font-semibold text-white mb-1">Create Your Atmosphere</h4>
+                                        <p className="mb-2">Combine sounds and scenes to maximize your experience.</p>
+                                    </div>
                                 </div>
-                                <div className="text-sm text-gray-300">
-                                    <h4 className="font-semibold text-white mb-1">Create Your Atmosphere</h4>
-                                    <p className="mb-2">Combine sounds and scenes to maximize your experience.</p>
-                                </div>
-                            </div>
 
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                                {soundscapes.map(sound => {
-                                    const isActive = activeSounds.includes(sound.path);
-                                    const isLoading = loadingSounds[sound.path];
-                                    const volume = soundVolumes[sound.path] || 0.5;
-                                    const Icon = sound.icon;
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    {soundscapes.map(sound => {
+                                        const isActive = activeSounds.includes(sound.path);
+                                        const isLoading = loadingSounds[sound.path];
+                                        const volume = soundVolumes[sound.path] || 0.5;
+                                        const Icon = sound.icon;
+                                        const requiredTier = ASSET_TIERS.getTier(sound.path, 'soundscape');
 
-                                    return (
-                                        <div
-                                            key={sound.path}
-                                            className={cn(
-                                                "relative group rounded-xl border-2 transition-all duration-300 overflow-hidden",
-                                                isActive ? "border-yellow-400 bg-yellow-950/20" : "border-gray-700 bg-gray-800/40 hover:border-gray-500 hover:bg-gray-800"
-                                            )}
-                                        >
-                                            <button
-                                                onClick={() => toggleSound(sound.path)}
-                                                className="w-full p-4 flex flex-col items-center gap-3 text-center"
-                                                disabled={isLoading && !isActive} // Prevent double clicks
-                                            >
-                                                <div className={cn("p-3 rounded-full transition-colors relative", isActive ? "bg-yellow-400 text-black" : "bg-gray-700 text-gray-400 group-hover:text-white")}>
-                                                    {/* --- NEW: Spinner or Icon --- */}
-                                                    {isLoading ? (
-                                                        <Loader2 size={24} className="animate-spin text-current" />
-                                                    ) : (
-                                                        <Icon size={24} />
+                                        return (
+                                            <PremiumGate key={sound.path} featureKey="premium_sounds" requiredTier={requiredTier}>
+                                                <div
+                                                    className={cn(
+                                                        "relative group rounded-xl border-2 transition-all duration-300 overflow-hidden",
+                                                        isActive ? "border-yellow-400 bg-yellow-950/20" : "border-gray-700 bg-gray-800/40 hover:border-gray-500 hover:bg-gray-800"
                                                     )}
-                                                </div>
-                                                <span className={cn("text-sm font-medium", isActive ? "text-yellow-400" : "text-gray-400 group-hover:text-gray-200")}>
-                                                    {sound.name}
-                                                </span>
-                                            </button>
+                                                >
+                                                    <button
+                                                        onClick={() => toggleSound(sound.path)}
+                                                        className="w-full p-4 flex flex-col items-center gap-3 text-center"
+                                                        disabled={isLoading && !isActive} // Prevent double clicks
+                                                    >
+                                                        <div className={cn("p-3 rounded-full transition-colors relative", isActive ? "bg-yellow-400 text-black" : "bg-gray-700 text-gray-400 group-hover:text-white")}>
+                                                            {/* --- NEW: Spinner or Icon --- */}
+                                                            {isLoading ? (
+                                                                <Loader2 size={24} className="animate-spin text-current" />
+                                                            ) : (
+                                                                <Icon size={24} />
+                                                            )}
+                                                        </div>
+                                                        <span className={cn("text-sm font-medium", isActive ? "text-yellow-400" : "text-gray-400 group-hover:text-gray-200")}>
+                                                            {sound.name}
+                                                        </span>
+                                                    </button>
 
-                                            {/* (Volume Slider Code remains the same...) */}
-                                            <div className={cn(
-                                                "px-4 pb-4 transition-all duration-300",
-                                                isActive ? "opacity-100 max-h-20" : "opacity-0 max-h-0 overflow-hidden"
-                                            )}>
-                                                <div className="flex items-center gap-2">
-                                                    <VolumeX size={14} className="text-yellow-400/50" />
-                                                    <Slider
-                                                        value={[volume * 100]}
-                                                        onValueChange={([val]) => changeVolume(sound.path, val / 100)}
-                                                        className="w-full cursor-pointer"
-                                                        max={100}
-                                                        step={1}
-                                                    />
-                                                    <Volume2 size={14} className="text-yellow-400" />
+                                                    {/* (Volume Slider Code remains the same...) */}
+                                                    <div className={cn(
+                                                        "px-4 pb-4 transition-all duration-300",
+                                                        isActive ? "opacity-100 max-h-20" : "opacity-0 max-h-0 overflow-hidden"
+                                                    )}>
+                                                        <div className="flex items-center gap-2">
+                                                            <VolumeX size={14} className="text-yellow-400/50" />
+                                                            <Slider
+                                                                value={[volume * 100]}
+                                                                onValueChange={([val]) => changeVolume(sound.path, val / 100)}
+                                                                className="w-full cursor-pointer"
+                                                                max={100}
+                                                                step={1}
+                                                            />
+                                                            <Volume2 size={14} className="text-yellow-400" />
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
+                                            </PremiumGate>
+                                        );
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    )}
-                </div>
-            </DialogContent>
-        </Dialog>
+                        )
+                    }
+                </div >
+            </DialogContent >
+        </Dialog >
     );
 }

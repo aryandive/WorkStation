@@ -1,6 +1,5 @@
-'use client';
-
-import { useAuth } from '@/context/AuthContext';
+// hooks/useAccess.js
+'use client'; import { useAuth } from '@/context/AuthContext';
 import { useSubscription } from '@/context/SubscriptionContext';
 
 export function useAccess() {
@@ -9,6 +8,13 @@ export function useAccess() {
 
   const isLoading = authLoading || subLoading;
 
+  // New Helper: Extrapolating User Tier for Data-Driven Gatekeeper
+  const getCurrentTier = () => {
+    if (isPro) return 2; // Pro user
+    if (user) return 1;  // Free logged-in user
+    return 0;            // Anonymous
+  };
+
   // Define the strict access rules in one dictionary mapping
   // This maps a potential "featureKey" directly to its boolean requirement
   const featureAccessMap = {
@@ -16,21 +22,21 @@ export function useAccess() {
     'premium_sounds': isPro,
     'audio_mixing': isPro,
     'premium_wallpaper': isPro,
-    
+
     // 2. Stats & Insights
-    'historical_stats': isPro, 
+    'historical_stats': isPro,
     'journal_insights': isPro,
 
     // 3. Project Limits (Boolean evaluation for simple gates)
     'unlimited_projects': isPro,
-    
+
     // 4. Base Features (Always true if they are logged in, etc.)
     'cloud_sync': !!user,
   };
 
   return {
     isLoading,
-    
+
     // Role Helpers
     isAnonymous: !user,
     isFree: !!user && !isPro,
@@ -41,20 +47,26 @@ export function useAccess() {
 
     // --- NEW: The unified check function for the Gatekeeper ---
     // Pass in a featureKey string, it returns true if they have access, false if locked.
-    hasAccess: (featureKey) => {
-        // If the key doesn't exist in our map, fail secure (deny access)
-        if (featureAccessMap[featureKey] === undefined) {
-            console.warn(`Access check failed: Feature key '${featureKey}' is not defined.`);
-            return false;
-        }
-        return featureAccessMap[featureKey];
+    // If a requiredTier is passed, it ignores the featureAccessMap and performs a strict tier comparison.
+    hasAccess: (featureKey, requiredTier) => {
+      if (requiredTier !== undefined) {
+        return getCurrentTier() >= requiredTier;
+      }
+
+      // If the key doesn't exist in our map, fail secure (deny access)
+      if (featureAccessMap[featureKey] === undefined) {
+        console.warn(`Access check failed: Feature key '${featureKey}' is not defined.`);
+        return false;
+      }
+      return featureAccessMap[featureKey];
     },
-    
+
     // Keeping your original flags for backward compatibility if you used them elsewhere
     canSyncToCloud: !!user,
     canUsePremiumSounds: isPro,
     canUploadWallpaper: isPro,
-    canViewHistoricalStats: isPro, 
+    canViewHistoricalStats: isPro,
     canViewJournalInsights: isPro,
+    getCurrentTier,
   };
 }
