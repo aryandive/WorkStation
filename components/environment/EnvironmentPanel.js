@@ -18,7 +18,7 @@ import {
 import { cn } from '@/lib/utils';
 import { createClient } from '@/utils/supabase/client';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ANIMATED_SCENES, STATIC_CATEGORIES, STATIC_IMAGES } from '@/lib/environmentConfig';
+import { ANIMATED_SCENES, STATIC_CATEGORIES, STATIC_IMAGES } from '@/lib/environmentConfig';d
 
 // --- IndexedDB Helpers ---
 const DB_NAME = 'EnvironmentAssetsDB';
@@ -137,8 +137,8 @@ const HighDataDisclaimer = ({ isBottom, onDismiss }) => (
                 )}
             </div>
             <p className="opacity-90 text-xs leading-relaxed">
-                This setting uses highest quality video for maximum immersion. 
-                Animated scenes require significant data to run smoothly. 
+                This setting uses highest quality video for maximum immersion.
+                Animated scenes require significant data to run smoothly.
                 We recommend <strong>Wi-Fi</strong> or switching to <strong>Static Backgrounds</strong> if you have limited internet speed.
             </p>
         </div>
@@ -177,12 +177,12 @@ function SceneButton({ scene, isActive, onClick }) {
     const renderMedia = () => {
         if (scene.type === 'video') {
             return (
-                <video 
-                    src={scene.url} 
-                    className="object-cover w-full h-full select-none" 
-                    muted 
-                    loop 
-                    onMouseOver={e => e.target.play().catch(()=>{})} 
+                <video
+                    src={scene.url}
+                    className="object-cover w-full h-full select-none"
+                    muted
+                    loop
+                    onMouseOver={e => e.target.play().catch(() => { })}
                     onMouseOut={e => e.target.pause()}
                     onContextMenu={preventTheft}
                     onDragStart={preventTheft}
@@ -191,11 +191,11 @@ function SceneButton({ scene, isActive, onClick }) {
             );
         }
         return (
-            <Image 
-                src={scene.thumbnail || '/placeholder.webp'} 
-                alt={scene.name || 'Scene'} 
-                fill 
-                sizes="(max-width: 768px) 33vw, 20vw" 
+            <Image
+                src={scene.thumbnail || '/placeholder.webp'}
+                alt={scene.name || 'Scene'}
+                fill
+                sizes="(max-width: 768px) 33vw, 20vw"
                 className="object-cover group-hover:scale-105 transition-transform duration-300 select-none"
                 onContextMenu={preventTheft}
                 onDragStart={preventTheft}
@@ -205,13 +205,13 @@ function SceneButton({ scene, isActive, onClick }) {
     };
 
     return (
-        <button 
-            onClick={onClick} 
+        <button
+            onClick={onClick}
             className={cn(
-                "rounded-lg overflow-hidden border-2 transition-all group relative aspect-[16/9] w-full select-none", 
+                "rounded-lg overflow-hidden border-2 transition-all group relative aspect-[16/9] w-full select-none",
                 isActive ? "border-yellow-400 ring-2 ring-yellow-400/50" : "border-transparent hover:border-gray-600 bg-black/40"
             )}
-            onContextMenu={preventTheft} 
+            onContextMenu={preventTheft}
         >
             {renderMedia()}
             {/* z-20 layer for protection */}
@@ -231,15 +231,15 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
         playScene, toggleSound, changeVolume, playYoutube, stopYoutube,
         setYoutubeShowPlayer, setYoutubeMute, setYoutubeShowControls, loadingSounds
     } = useEnvironment();
-    
+
     const [activeTab, setActiveTab] = useState('scenes');
     const [youtubeUrl, setYoutubeUrl] = useState('');
     const [youtubeError, setYoutubeError] = useState('');
-    
+
     // --- Scenes Tab State ---
     const [isAnimatedExpanded, setIsAnimatedExpanded] = useState(false);
     const [activeImageCategory, setActiveImageCategory] = useState('all');
-    
+
     // --- Custom Local Assets State ---
     const [customScenes, setCustomScenes] = useState([]);
     const [customImages, setCustomImages] = useState([]);
@@ -260,7 +260,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     useEffect(() => {
         const savedDataDisclaimer = localStorage.getItem('env_disclaimer_docked') === 'true';
         const savedStudyTip = localStorage.getItem('env_studytip_docked') === 'true';
-        
+
         setDataDisclaimerAtBottom(savedDataDisclaimer);
         setStudyTipAtBottom(savedStudyTip);
         setPreferencesLoaded(true);
@@ -284,10 +284,10 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                 try {
                     const scenes = await getAllFromDB('custom_videos');
                     const images = await getAllFromDB('custom_images');
-                    
+
                     const scenesWithUrls = scenes.map(s => ({ ...s, url: URL.createObjectURL(s.blob) }));
                     const imagesWithUrls = images.map(i => ({ ...i, url: URL.createObjectURL(i.blob) }));
-                    
+
                     setCustomScenes(scenesWithUrls);
                     setCustomImages(imagesWithUrls);
                 } catch (e) {
@@ -340,7 +340,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                 created: Date.now()
             };
             await saveToDB('custom_videos', newAsset);
-            
+
             const url = URL.createObjectURL(file);
             setCustomScenes(prev => [...prev, { ...newAsset, url }]);
         } catch (error) {
@@ -370,7 +370,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                 created: Date.now()
             };
             await saveToDB('custom_images', newAsset);
-            
+
             const url = URL.createObjectURL(file);
             setCustomImages(prev => [...prev, { ...newAsset, url }]);
         } catch (error) {
@@ -398,23 +398,23 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
     // --- Handlers for YouTube ---
     const handleYoutubePlay = (url) => {
         setYoutubeError('');
-        
-        if(!url || url.trim() === '') {
+
+        if (!url || url.trim() === '') {
             setYoutubeError('Please enter a YouTube URL.');
             return;
         }
 
         const id = localGetYoutubeId(url);
-        if(!id) {
-             setYoutubeError('Invalid YouTube URL format.');
-             return;
+        if (!id) {
+            setYoutubeError('Invalid YouTube URL format.');
+            return;
         }
 
         const success = playYoutube(url, { isCustom: true });
-        
+
         if (success) {
             setYoutubeUrl('');
-            setYoutubeShowControls(true); 
+            setYoutubeShowControls(true);
         } else {
             setYoutubeError('Could not load video.');
         }
@@ -446,7 +446,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                 user_id: user.id,
                 video_id: videoId,
                 url: youtubeUrl,
-                title: `Custom Video ${savedVideos.length + 1}`, 
+                title: `Custom Video ${savedVideos.length + 1}`,
                 thumbnail: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`
             };
             const { data, error } = await supabase.from('user_videos').insert([newVideo]).select();
@@ -519,11 +519,11 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                 </div>
 
                 <div className="py-4 min-h-[300px]">
-                    
+
                     {/* --- TAB 1: SCENES --- */}
                     {activeTab === 'scenes' && (
                         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                            
+
                             {/* TOP DISCLAIMER (Only render if preferences loaded and NOT docked) */}
                             {preferencesLoaded && !dataDisclaimerAtBottom && (
                                 <HighDataDisclaimer isBottom={false} onDismiss={dismissDataDisclaimer} />
@@ -535,9 +535,9 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                     <h4 className="font-semibold text-gray-300 flex items-center gap-2">
                                         <Video size={18} className="text-yellow-400" /> Animated Scenes
                                     </h4>
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm" 
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
                                         onClick={() => setIsAnimatedExpanded(!isAnimatedExpanded)}
                                         className="text-xs text-yellow-400 hover:text-yellow-300 hover:bg-yellow-400/10"
                                     >
@@ -554,7 +554,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             <SceneButton
                                                 scene={scene}
                                                 isActive={
-                                                    (scene.videoId && activeScene.videoId === scene.videoId) || 
+                                                    (scene.videoId && activeScene.videoId === scene.videoId) ||
                                                     (scene.url && activeScene.path === scene.url)
                                                 }
                                                 onClick={() => {
@@ -566,7 +566,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                 }}
                                             />
                                             {scene.type === 'video' && (
-                                                 <button 
+                                                <button
                                                     onClick={(e) => handleDeleteCustom('video', scene.id)}
                                                     className="absolute top-1 right-1 p-1.5 bg-red-600/90 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
                                                 >
@@ -610,7 +610,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             onClick={() => setActiveImageCategory(cat.id)}
                                             className={cn(
                                                 "whitespace-nowrap rounded-full px-4 transition-all",
-                                                activeImageCategory === cat.id 
+                                                activeImageCategory === cat.id
                                                     ? "bg-yellow-400 text-black hover:bg-yellow-500 border-transparent"
                                                     : "border-gray-700 text-gray-400 hover:text-white hover:border-gray-500 bg-transparent"
                                             )}
@@ -640,16 +640,16 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                     {(activeImageCategory === 'custom' ? customImages : filteredImages).map((img, idx) => (
                                         <div key={img.id || idx} className="relative group">
                                             <SceneButton
-                                                scene={{ 
-                                                    ...img, 
-                                                    type: 'image', 
-                                                    thumbnail: activeImageCategory === 'custom' ? img.url : img.src 
+                                                scene={{
+                                                    ...img,
+                                                    type: 'image',
+                                                    thumbnail: activeImageCategory === 'custom' ? img.url : img.src
                                                 }}
                                                 isActive={activeScene.path === (activeImageCategory === 'custom' ? img.url : img.src)}
                                                 onClick={() => playScene({ type: 'image', path: activeImageCategory === 'custom' ? img.url : img.src })}
                                             />
                                             {activeImageCategory === 'custom' && (
-                                                 <button 
+                                                <button
                                                     onClick={(e) => handleDeleteCustom('image', img.id)}
                                                     className="absolute top-1 right-1 p-1.5 bg-red-600/90 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-10"
                                                 >
@@ -671,14 +671,14 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                     {/* --- TAB 2: YOUTUBE --- */}
                     {activeTab === 'youtube' && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                             
-                             {/* TOP BANNERS */}
-                             {preferencesLoaded && !dataDisclaimerAtBottom && (
+
+                            {/* TOP BANNERS */}
+                            {preferencesLoaded && !dataDisclaimerAtBottom && (
                                 <HighDataDisclaimer isBottom={false} onDismiss={dismissDataDisclaimer} />
-                             )}
-                             {preferencesLoaded && !studyTipAtBottom && (
+                            )}
+                            {preferencesLoaded && !studyTipAtBottom && (
                                 <StudyModeTip isBottom={false} onDismiss={dismissStudyTip} />
-                             )}
+                            )}
 
                             <div>
                                 <h4 className="font-semibold text-gray-300 mb-3">Curated Playlists</h4>
@@ -694,7 +694,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             />
                                         );
                                     })}
-                                    
+
                                     <button
                                         onClick={() => {
                                             const librarySection = document.getElementById('custom-library-section');
@@ -716,7 +716,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                     <h4 className="font-semibold text-gray-300 flex items-center gap-2">
                                         <LinkIcon size={16} /> Custom Video Source
                                     </h4>
-                                    <span className={cn("text-xs px-2 py-0.5 rounded-full border", 
+                                    <span className={cn("text-xs px-2 py-0.5 rounded-full border",
                                         savedVideos.length >= MAX_SAVED_VIDEOS ? "border-red-500 text-red-400" : "border-gray-700 text-gray-400"
                                     )}>
                                         Library: {savedVideos.length} / {MAX_SAVED_VIDEOS}
@@ -734,12 +734,12 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             />
                                             <Youtube className="absolute left-3 top-2.5 text-gray-500 h-4 w-4" />
                                         </div>
-                                        
+
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <Button 
-                                                        onClick={handleSaveToLibrary} 
+                                                    <Button
+                                                        onClick={handleSaveToLibrary}
                                                         variant="secondary"
                                                         disabled={isSaving || savedVideos.length >= MAX_SAVED_VIDEOS}
                                                         className={cn("gap-2", savedVideos.length >= MAX_SAVED_VIDEOS && "opacity-50 cursor-not-allowed")}
@@ -753,8 +753,8 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                             </Tooltip>
                                         </TooltipProvider>
 
-                                        <Button 
-                                            onClick={() => handleYoutubePlay(youtubeUrl)} 
+                                        <Button
+                                            onClick={() => handleYoutubePlay(youtubeUrl)}
                                             className="bg-red-600 hover:bg-red-700 text-white gap-2 font-semibold"
                                         >
                                             <Play size={16} fill="currentColor" /> Load
@@ -779,7 +779,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                             onClick={() => playYoutube(vid.url, { isCustom: false })}
                                                         />
                                                         {/* FIXED DELETE BUTTON (Z-Index 50) */}
-                                                        <button 
+                                                        <button
                                                             onClick={(e) => handleDeleteFromLibrary(vid.id, e)}
                                                             className="absolute top-1 right-1 p-1.5 bg-black/60 hover:bg-red-600 text-white rounded-md opacity-0 group-hover:opacity-100 transition-all z-50 cursor-pointer"
                                                             title="Delete from Library"
@@ -881,7 +881,7 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                                     {sound.name}
                                                 </span>
                                             </button>
-                                            
+
                                             {/* (Volume Slider Code remains the same...) */}
                                             <div className={cn(
                                                 "px-4 pb-4 transition-all duration-300",

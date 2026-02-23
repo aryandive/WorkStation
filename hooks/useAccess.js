@@ -9,37 +9,52 @@ export function useAccess() {
 
   const isLoading = authLoading || subLoading;
 
+  // Define the strict access rules in one dictionary mapping
+  // This maps a potential "featureKey" directly to its boolean requirement
+  const featureAccessMap = {
+    // 1. Environment & Focus
+    'premium_sounds': isPro,
+    'audio_mixing': isPro,
+    'premium_wallpaper': isPro,
+    
+    // 2. Stats & Insights
+    'historical_stats': isPro, 
+    'journal_insights': isPro,
+
+    // 3. Project Limits (Boolean evaluation for simple gates)
+    'unlimited_projects': isPro,
+    
+    // 4. Base Features (Always true if they are logged in, etc.)
+    'cloud_sync': !!user,
+  };
+
   return {
     isLoading,
+    
     // Role Helpers
     isAnonymous: !user,
     isFree: !!user && !isPro,
     isPro: !!isPro,
 
-    // Feature Flags (The "Rules")
-    
-    // 1. Data Persistence
-    canSyncToCloud: !!user, // Only logged-in users sync to Supabase
-    
-    // 2. Project Limits
-    // Anonymous: 3 projects max (stored locally)
-    // Free: 5 projects max
-    // Pro: Unlimited
+    // Project Limits (Keeping your custom logic here)
     maxProjects: !user ? 3 : (isPro ? Infinity : 5),
 
-    // 3. Environment & Focus
-    // Pro users get full mixing and premium wallpapers
+    // --- NEW: The unified check function for the Gatekeeper ---
+    // Pass in a featureKey string, it returns true if they have access, false if locked.
+    hasAccess: (featureKey) => {
+        // If the key doesn't exist in our map, fail secure (deny access)
+        if (featureAccessMap[featureKey] === undefined) {
+            console.warn(`Access check failed: Feature key '${featureKey}' is not defined.`);
+            return false;
+        }
+        return featureAccessMap[featureKey];
+    },
+    
+    // Keeping your original flags for backward compatibility if you used them elsewhere
+    canSyncToCloud: !!user,
     canUsePremiumSounds: isPro,
     canUploadWallpaper: isPro,
-    
-    // 4. Stats & Insights
-    // Everyone sees a simple timer.
-    // Only Pro users see "The Ghost Bar" (History) and Heatmaps.
     canViewHistoricalStats: isPro, 
-    
-    // 5. Journaling
-    // Writing is free (build the habit).
-    // Reviewing past "Moods" or "Activity Rings" is Pro.
     canViewJournalInsights: isPro,
   };
 }
