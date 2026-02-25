@@ -24,7 +24,7 @@ export default function PomodoroTimerPage() {
   const [isPomodoroOpen, setIsPomodoroOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [isEnvironmentPanelOpen, setIsEnvironmentPanelOpen] = useState(false);
-  
+
   // Hover States for "Peek" functionality in Zen Mode
   const [isFeatureNavHovered, setIsFeatureNavHovered] = useState(false);
   const [isTopHovered, setIsTopHovered] = useState(false);
@@ -49,7 +49,7 @@ export default function PomodoroTimerPage() {
   const handleJournalClick = (e) => {
     e.preventDefault();
     if (!user) {
-      router.push('/landing');
+      router.push('/journal');
     } else {
       router.push('/journal');
     }
@@ -89,22 +89,22 @@ export default function PomodoroTimerPage() {
               <h2 className='text-gray-300 text-sm tracking-widest'>TODAY&apos;S FOCUS</h2>
               <h1 className='text-2xl font-bold text-white'>Focus Goal</h1>
               {/* --- INSERT THE NEW COMPONENT HERE --- */}
-            <div className="mt-1">
+              <div className="mt-1">
                 <TestingWarning />
+              </div>
             </div>
-            </div>
-            
+
             {/* Zen Mode Toggle (Replaces Play/Pause) */}
             <div className="flex items-center gap-2">
-                <Button 
-                    onClick={() => setIsZenMode(!isZenMode)} 
-                    variant="outline" 
-                    size="icon" 
-                    className="bg-black/20 border-white/20 hover:bg-white/20 text-white rounded-full backdrop-blur-sm transition-all"
-                >
-                    {isZenMode ? <EyeOff size={20} /> : <Eye size={20} />}
-                </Button>
-                {!isZenMode && <span className="text-xs text-white/50">Hide UI</span>}
+              <Button
+                onClick={() => setIsZenMode(!isZenMode)}
+                variant="outline"
+                size="icon"
+                className="bg-black/20 border-white/20 hover:bg-white/20 text-white rounded-full backdrop-blur-sm transition-all"
+              >
+                {isZenMode ? <EyeOff size={20} /> : <Eye size={20} />}
+              </Button>
+              {!isZenMode && <span className="text-xs text-white/50">Hide UI</span>}
             </div>
           </div>
 

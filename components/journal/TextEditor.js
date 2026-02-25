@@ -25,7 +25,8 @@ const TextEditor = forwardRef(({
     saveStatus,
     isContentLoading,
     onNavigate,
-    onEntriesClick
+    onEntriesClick,
+    onSnapshotClick
 }, ref) => {
     const editorRef = useRef(null);
     const [localTitle, setLocalTitle] = useState(entry?.title || '');
@@ -215,7 +216,9 @@ const TextEditor = forwardRef(({
 
                 {/* Activity Rings Integration */}
                 <PremiumGate featureKey="journal_insights" requiredTier={2} lockClassName="absolute -top-2 -right-2">
-                    <ActivityRings stats={dailyStats} onEntriesClick={onEntriesClick} />
+                    <div onClick={onSnapshotClick} className="cursor-pointer">
+                        <ActivityRings stats={dailyStats} onEntriesClick={(e) => { e.stopPropagation(); onEntriesClick(); }} />
+                    </div>
                 </PremiumGate>
             </div>
 
