@@ -45,15 +45,15 @@ export default function ReflectivePrompt({ dailyStats }) {
         let promptPool = GENERAL_PROMPTS;
 
         // Logic: Switch pool based on focus performance
-        if (dailyStats && dailyStats.sessions.value) {
-            const pomosCompleted = parseInt(dailyStats.sessions.value, 10);
-            
-            if (pomosCompleted >= 4) {
-                promptPool = HIGH_PERFORMANCE_PROMPTS;
-            } else if (pomosCompleted <= 1 && new Date().getHours() > 18) {
-                promptPool = LOW_PERFORMANCE_PROMPTS;
-            }
-        }
+        // if (dailyStats && dailyStats.sessions.value) {
+        //     const pomosCompleted = parseInt(dailyStats.sessions.value, 10);
+        //     
+        //     if (pomosCompleted >= 4) {
+        //         promptPool = HIGH_PERFORMANCE_PROMPTS;
+        //     } else if (pomosCompleted <= 1 && new Date().getHours() > 18) {
+        //         promptPool = LOW_PERFORMANCE_PROMPTS;
+        //     }
+        // }
 
         setPrompt(currentPrompt => {
             let newPrompt = currentPrompt;
@@ -65,7 +65,7 @@ export default function ReflectivePrompt({ dailyStats }) {
         });
 
         setTimeout(() => setIsRefreshing(false), 500);
-    }, [dailyStats]);
+    }, []);
 
     // Initial load
     useEffect(() => {
@@ -81,8 +81,8 @@ export default function ReflectivePrompt({ dailyStats }) {
                 <p className="text-sm text-gray-200 flex-grow transition-opacity duration-300 italic">
                     &quot;{prompt}&quot;
                 </p>
-                <button 
-                    onClick={refreshPrompt} 
+                <button
+                    onClick={refreshPrompt}
                     className="p-2 rounded-full bg-gray-700 hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 flex-shrink-0"
                     title="Get new prompt"
                 >

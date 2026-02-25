@@ -27,7 +27,9 @@ import JournalCalendar from '@/components/journal/JournalCalendar';
 import TextEditor from '@/components/journal/TextEditor';
 import SignUpModal from '@/components/auth/SignUpModal';
 import JournalEntriesModal from '@/components/journal/JournalEntriesModal';
-import DailySnapshotModal from '@/components/journal/DailySnapshotModal';
+import SnapshotsModal from '@/components/journal/SnapshotsModal';
+import HabitStreak from '@/components/journal/HabitStreak';
+import { calculateStreaks } from '@/lib/streakUtils';
 
 export default function JournalPage() {
     // --- Auth & Data State ---
@@ -57,6 +59,7 @@ export default function JournalPage() {
     // --- Search State ---
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredEntryDays, setFilteredEntryDays] = useState(null);
+    const [streaks, setStreaks] = useState({ current: 0, best: 0 });
 
     // --- Stats State ---
     const [dailyStats, setDailyStats] = useState({
@@ -105,9 +108,12 @@ export default function JournalPage() {
                     return acc;
                 }, {});
                 setAllEntries(entriesMap);
+                setStreaks(calculateStreaks(data));
             }
         } else {
-            setAllEntries(getLocalJournals());
+            const localData = getLocalJournals();
+            setAllEntries(localData);
+            setStreaks(calculateStreaks(Object.values(localData)));
         }
     }, [user, isPro, isLoading, supabase]);
 
@@ -341,7 +347,7 @@ export default function JournalPage() {
         <div className="min-h-screen w-full bg-gray-950 text-gray-100 font-sans flex flex-col">
             <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} mode={modalMode} />
             <JournalEntriesModal isOpen={isEntriesListOpen} setIsOpen={setIsEntriesListOpen} allEntries={allEntries} onSelectEntry={safeSetSelectedDate} />
-            <DailySnapshotModal isOpen={isSnapshotOpen} setIsOpen={setIsSnapshotOpen} date={selectedDate} />
+            <SnapshotsModal isOpen={isSnapshotOpen} setIsOpen={setIsSnapshotOpen} date={selectedDate} />
 
             <Dialog open={isDataRiskModalOpen} onOpenChange={setIsDataRiskModalOpen}>
                 <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-md">
@@ -405,7 +411,7 @@ export default function JournalPage() {
                 </div>
 
                 <main className="flex-grow flex flex-col lg:flex-row gap-5 h-full">
-                    <aside className={cn("w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 overflow-hidden", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
+                    <aside className={cn("w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 lg:sticky lg:top-6 lg:self-start lg:h-fit overflow-hidden", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
                             <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">Today</button>
                             <div className="relative w-full">
@@ -415,36 +421,8 @@ export default function JournalPage() {
                         </div>
 
                         <JournalCalendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
+                        <HabitStreak current={streaks.current} best={streaks.best} />
                         <ReflectivePrompt dailyStats={dailyStats} />
-
-                        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 xl:p-5 rounded-2xl shadow-lg border border-gray-700">
-                            <h3 className="font-bold text-white mb-2 flex items-center gap-2">
-                                <Crown className="w-4 h-4 text-yellow-500" /> Focus Analytics
-                            </h3>
-                            <p className="text-xs text-gray-400 mb-4 leading-relaxed">
-                                Review your daily Pomodoro sessions, completed tasks, and journal entries all correlated in a single view.
-                            </p>
-
-                            {!user ? (
-                                <Button
-                                    onClick={() => { setModalMode('signup'); setIsSignUpModalOpen(true); }}
-                                    className="w-full bg-yellow-500 hover:bg-yellow-400 text-gray-900 font-bold border border-yellow-500 transition-all shadow-md group"
-                                >
-                                    <span className="group-hover:scale-105 transition-transform flex items-center gap-2">
-                                        Sign In to View
-                                    </span>
-                                </Button>
-                            ) : (
-                                <Button
-                                    onClick={() => setIsSnapshotOpen(true)}
-                                    className="w-full bg-gray-800 hover:bg-gray-700 text-yellow-500 border border-gray-600 hover:border-yellow-500 transition-all shadow-md group"
-                                >
-                                    <span className="group-hover:scale-105 transition-transform flex items-center gap-2">
-                                        View Today&apos;s Snapshot
-                                    </span>
-                                </Button>
-                            )}
-                        </div>
                     </aside>
 
                     <div {...editorWrapperProps} className="flex-grow min-h-[500px] lg:h-auto">
