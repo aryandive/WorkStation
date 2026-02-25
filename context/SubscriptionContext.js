@@ -41,12 +41,19 @@ export function SubscriptionProvider({ children }) {
 
     }, [user, authLoading, supabase]);
 
-    const value = useMemo(() => ({
-        subscription,
-        // --- DEV OVERRIDE: Force isPro to true for testing ---
-        isPro: !!subscription, 
-        loading,
-    }), [subscription, loading]);
+    const value = useMemo(() => {
+        // Real logic: Check if subscription exists and is active/trialing
+        const hasValidSubscription = !!subscription;
+        
+        // Dev Override: Check your .env.local for a flag
+        const isDevOverride = process.env.NEXT_PUBLIC_FORCE_PREMIUM === 'true';
+
+        return {
+            subscription,
+            isPro: hasValidSubscription || isDevOverride, 
+            loading,
+        };
+    }, [subscription, loading]);
 
     return (
         <SubscriptionContext.Provider value={value}>

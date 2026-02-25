@@ -1,116 +1,126 @@
-# **Developer Guidelines & Project Documentation**
+# **WorkStation - Developer Guidelines & Project Documentation**
 
-## **1\. Project Overview**
+## **1. Project Overview**
 
-**Project Name:** Immersive Productivity Platform (Placeholder)
+**Project Name:** WorkStation
+**Founder:** Aryan Dive
+**Core Narrative:** An underdog, student-built productivity suite designed as a free/affordable alternative to expensive corporate SaaS products. 
 
 **Project Description:**
+WorkStation is a comprehensive productivity web application designed to help users maintain focus and track their mental well-being. It combines time management techniques with environmental customization. 
 
-This application is a comprehensive productivity suite designed to help users maintain focus and track their mental well-being. It combines time management techniques with environmental customization. Key features include:
+**Key Features:**
+* **Focus Tools:** A customizable Pomodoro timer with visual progress indicators that runs in the background.
+* **Task Management:** A persistent Todo list to track daily objectives.
+* **Journaling:** A reflective journal with Local (browser) and Cloud (Supabase) storage capabilities.
+* **Environment:** An audio mixer allowing users to play and mix ambient sounds (rain, forest, white noise, etc.) to create their ideal focus atmosphere.
+* **Authentication:** Passwordless/Standard auth via Supabase.
+* **Hybrid Storage:** Seamless transition from unauthenticated (local storage) to authenticated (cloud sync) states.
 
-* **Focus Tools:** A customizable Pomodoro timer with visual progress indicators.  
-* **Task Management:** A persistent Todo list to track daily objectives.  
-* **Journaling:** A reflective journal with local and cloud storage capabilities, including activity rings and calendar views.  
-* **Environment:** An audio mixer allowing users to play and mix ambient sounds (rain, forest, white noise) to create their ideal focus atmosphere.  
-* **Subscription System:** A tiered access model (Free vs. Premium) integrated with PayPal for monthly/yearly subscriptions.
+---
 
-## **2\. Tech Stack**
+## **2. Pricing & Business Model (The "Server Fund" Strategy)**
+
+WorkStation uses a specific psychological pricing model designed for immediate cash flow to fund infrastructure, utilizing the "Decoy Effect."
+
+### **The Tiers:**
+1. **Starter (Free):** * Local browser storage only, 30 journal entry limit, basic sounds. 
+   * *Goal:* Lower the barrier to entry so users can experience the app immediately.
+2. **The Renter (Monthly - $4.99/mo):** * Full cloud sync, unlimited entries, full ambiance library. 
+   * *Goal:* Acts as the "Price Anchor." We display a $59.88/yr strikethrough to make the Lifetime deal look irresistible. Managed via PayPal Subscriptions.
+3. **The Believer (Lifetime - $19.99 One-Time):** * "The Server Fund" project. Limited to 25 users. 
+   * *Goal:* Generate immediate capital ($500) to pay for a Hetzner CX22 VPS and Apple Developer fees for the year. Managed via PayPal Checkout (One-Time Order).
+
+### **Refund Policy (14-Day Manual):**
+To build trust as a solo developer, we offer a 14-day performance-based guarantee for Lifetime buyers. Refunds are processed manually via email (`support@workstation.com`) to prevent automated exploitation.
+
+---
+
+## **3. Tech Stack**
 
 ### **Core Framework**
-
-* **Frontend:** [Next.js 14+](https://nextjs.org/) (App Router architecture)  
-* **Language:** JavaScript (ES6+)  
-* **Styling:** [Tailwind CSS](https://tailwindcss.com/) with clsx and tailwind-merge.  
-* **UI Components:** Custom components built with Radix UI primitives (via components/ui folder).
+* **Frontend:** [Next.js 14+](https://nextjs.org/) (App Router architecture)
+* **Language:** JavaScript (ES6+)
+* **Styling:** [Tailwind CSS](https://tailwindcss.com/) with `clsx` and `tailwind-merge`.
+* **UI Components:** Custom components built with Radix UI primitives (`components/ui` folder) and Shadcn-ui patterns.
 
 ### **Backend & Services**
+* **Authentication & Database:** [Supabase](https://supabase.com/) (Auth, PostgreSQL).
+* **Payments:** [PayPal SDK](https://developer.paypal.com/home) 
+  * Uses `@paypal/react-paypal-js`.
+  * Integrates both `intent="subscription"` (Monthly) and `intent="capture"` (Lifetime).
+* **Hosting (Target):** Netlify / Cloudflare Pages (Frontend) + Hetzner CX22 VPS (Future Backend/Self-hosting).
 
-* **Authentication & Database:** [Supabase](https://supabase.com/) (Auth, PostgreSQL).  
-* **Payments:** [PayPal SDK](https://developer.paypal.com/home) (Subscriptions API & Webhooks).  
-* **Tunneling:** [Ngrok](https://ngrok.com/) (Used for testing PayPal webhooks locally).
+---
 
-### **State Management**
-
-* **React Context:**  
-  * AuthContext: User session management.  
-  * SubscriptionContext: Premium status handling.  
-  * EnvironmentContext: Audio player and volume state.  
-* **Custom Hooks:** usePomodoroTimer, useSessionLogger, useStats.
-
-## **3\. Important Commands**
+## **4. Important Commands**
 
 Ensure you are in the root directory before running these commands.
 
 | Command | Description |
-| :---- | :---- |
-| npm install | Installs all dependencies listed in package.json. |
-| npm run dev | Starts the local development server at http://localhost:3000. |
-| npm run build | Compiles the application for production. |
-| npm start | Runs the built production application. |
-| npm run lint | Runs ESLint to check for code quality issues. |
+| :--- | :--- |
+| `npm install` | Installs all dependencies listed in `package.json`. |
+| `npm run dev` | Starts the local development server at `http://localhost:3000`. |
+| `npm run build` | Compiles the application for production. |
+| `npm start` | Runs the built production application. |
+| `npm run lint` | Runs ESLint to check for code quality issues. |
 
-## **4\. Development Workflow**
+---
 
-### **A. Initial Setup**
+## **5. Development Workflow & Architecture**
 
-1. Clone the repository.  
-2. Run npm install.  
-3. **Environment Variables:** Create a .env.local file in the root. Refer to lib/environmentConfig.js for required keys. You will need:  
-   * NEXT\_PUBLIC\_SUPABASE\_URL  
-   * NEXT\_PUBLIC\_SUPABASE\_ANON\_KEY  
-   * NEXT\_PUBLIC\_PAYPAL\_CLIENT\_ID  
-   * PAYPAL\_CLIENT\_SECRET (Server-side only)  
-   * PAYPAL\_WEBHOOK\_ID
+### **A. Initial Setup & Environment Variables**
+1. Clone the repository and run `npm install`.
+2. Create a `.env.local` file in the root. You will need:
+   * `NEXT_PUBLIC_SUPABASE_URL`
+   * `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   * `NEXT_PUBLIC_PAYPAL_CLIENT_ID`
+   * `PAYPAL_CLIENT_SECRET` (Server-side only)
+   * `PAYPAL_WEBHOOK_ID`
+   * `NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID`
 
 ### **B. Working with Payments (PayPal)**
+Because we have two different payment types, the integration is split:
+* **Monthly:** Handled by `<PayPalSubscriptionButton />` invoking `actions.subscription.create`.
+* **Lifetime:** Handled directly in `PricingCard` using `<PayPalButtons />` invoking `actions.order.create`.
+* **Webhooks:** Local testing requires tunneling.
+  1. Start Next.js: `npm run dev`
+  2. Start ngrok: `ngrok http 3000`
+  3. Update the Webhook URL in your PayPal Developer Dashboard to the ngrok URL (e.g., `https://<id>.ngrok.app/api/paypal/webhook`).
 
-Since the app handles subscriptions via webhooks (app/api/paypal/webhook/route.js), testing requires the local server to be exposed to the internet.
+### **C. State Management**
+* **AuthContext:** Manages Supabase user sessions globally.
+* **SubscriptionContext:** Checks if a user has active Pro/Lifetime status and grants access to premium features.
+* **EnvironmentContext:** Manages the global audio player (`MasterPlayer.js`). Ensures rain/lo-fi beats continue playing uninterrupted as the user navigates between the timer, journal, and pricing pages.
 
-1. Start your Next.js app: npm run dev.  
-2. Start ngrok: ngrok http 3000 (Configuration found in ngrok.yml).  
-3. Update the Webhook URL in your PayPal Developer Dashboard to the URL provided by ngrok (e.g., https://\<id\>.ngrok.io/api/paypal/webhook).
+### **D. Directory Structure**
+* `app/`: Next.js App Router (Pages, Layouts, API routes).
+  * `api/paypal/`: Webhook processing and subscription creation.
+  * `pricing/`, `help/`, `contact/`: Marketing and support pages.
+* `components/`:
+  * `ui/`: Reusable primitives (Buttons, Inputs, Textareas).
+  * `environment/`: Audio mixer and visual background logic.
+  * `journal/`: Rich text editor, calendar, and activity rings.
+* `lib/`: 
+  * `localJournal.js`: Handles IndexedDB/LocalStorage fallback for free users.
+  * `supabaseClient.js`: Database connection.
 
-### **C. Directory Structure**
+---
 
-* **app/**: Contains all pages and API routes.  
-  * app/api/: Backend logic (PayPal webhooks, debug routes).  
-  * app/auth/: Supabase auth callback routes.  
-  * app/journal/, app/login/, etc.: Application views.  
-* **components/**:  
-  * ui/: Reusable primitive components (buttons, sliders, cards).  
-  * pomodoro/, journal/, environment/: Feature-specific components.  
-* **lib/**: Utility functions, Supabase clients, and configuration constants.  
-* **hooks/**: Custom React hooks for logic separation.
+## **6. Deployment Strategy**
 
-## **5\. Additional Helpful Information**
+**Phase 1 (Zero-Budget Launch):**
+* **Frontend:** Deploy to **Netlify** (Starter Tier). 
+  * *Why:* Vercel's Free Hobby Tier strictly prohibits commercial activity (payments). Netlify allows commercial use on their free tier, protecting the app from sudden TOS bans.
+* **Database:** Supabase Free Tier (500MB is sufficient for ~100k+ text-based journal entries).
 
-### **Authentication Flow**
+**Phase 2 (Post-Lifetime Sales):**
+* **Infrastructure:** Migrate to a **Hetzner CX22 VPS** (Located in Germany/Helsinki for 20TB bandwidth to handle audio assets).
+* **Setup:** Install Ubuntu 24.04 and use Docker/Coolify to manage the Next.js frontend and self-hosted databases securely.
 
-The app uses Supabase Auth.
+---
 
-1. **Sign Up/Login:** Handled in app/login and app/signup.  
-2. **Middleware:** middleware.js protects routes. It checks for a Supabase session and redirects unauthenticated users away from protected routes (like /journal).  
-3. **Context:** AuthContext.js listens for auth state changes and makes the user object available globally.
-
-### **Journaling Logic**
-
-Journaling works in a hybrid mode (referenced in lib/localJournal.js):
-
-* **Unauthenticated Users:** Data may be stored in localStorage (logic to be verified in hooks/).  
-* **Authenticated Users:** Data is synced to the Supabase database.  
-* **Components:** The editor supports rich text interaction via TextEditor.js.
-
-### **Audio/Environment System**
-
-The EnvironmentPanel.js and MasterPlayer.js control the audio.
-
-* Audio files are typically lazy-loaded to prevent performance bottlenecks.  
-* State is managed in EnvironmentContext.js to ensure audio persists as the user navigates between pages.
-
-### **Deployment**
-
-The project is configured for deployment on **Vercel**.
-
-1. Push code to GitHub.  
-2. Import project into Vercel.  
-3. **Critical:** Add all Environment Variables from your .env.local to the Vercel Project Settings.
+## **7. Marketing & Content Strategy**
+* **Core Identity:** Authentic, broke student developer. Avoid corporate jargon ("Glitch in the matrix"). Use radical honesty ("The Server Fund").
+* **Content:** Short-form (Reels/Shorts/TikTok) focusing on the "Aesthetic" (rain + dark mode) and the "Student Struggle" (3 AM coding sessions).
+* **Rule of Thumb:** Show, don't tell. Let the UI and the audio speak for themselves.

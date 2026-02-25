@@ -39,9 +39,16 @@ import {
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
+import { useAccess } from '@/hooks/useAccess';
+import { useAuth } from '@/context/AuthContext';
+import { PremiumGate } from '@/components/system/PremiumGate';
 
 export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
+    const { maxProjects, getCurrentTier } = useAccess();
+    const { openSignUpModal } = useAuth();
+    const userTier = getCurrentTier();
     const [projects, setProjects] = useState([]);
+    const isAtLimit = projects.length >= maxProjects;
     const [tasks, setTasks] = useState([]);
     const [activeProjectId, setActiveProjectId] = useState(null);
     const [newTaskText, setNewTaskText] = useState('');
@@ -54,7 +61,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
     const supabase = createClient();
     const completionSoundRef = useRef(null);
-    
+
     // STEP C: Ref to track last fetch time for caching
     const lastFetchTimeRef = useRef(0);
 
@@ -92,6 +99,25 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
             if (projError) console.error("Error fetching projects:", projError);
 
+            let pData = projectsData || [];
+
+            // Tier 1 Seeding (Append 2 if exactly the 3 dummy ones)
+            if (pData.length === 3) {
+                const names = pData.map(p => p.name);
+                if (names.includes('Work') && names.includes('Personal') && names.includes('Groceries')) {
+                    const { data: insertedData, error: insertError } = await supabase
+                        .from('projects')
+                        .insert([
+                            { name: 'Side Hustle', user_id: currentUser.id },
+                            { name: 'Fitness', user_id: currentUser.id }
+                        ])
+                        .select();
+                    if (!insertError && insertedData) {
+                        pData = [...pData, ...insertedData];
+                    }
+                }
+            }
+
             // STEP A: Performance Boost - Only fetch Active tasks OR recently completed (7 days)
             // This prevents loading thousands of historical tasks every time.
             const sevenDaysAgo = new Date();
@@ -106,26 +132,36 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
             if (taskError) console.error("Error fetching tasks:", taskError);
 
-            setProjects(projectsData || []);
+            setProjects(pData);
             setTasks(tasksData || []);
-            
-            if ((projectsData || []).length > 0 && !activeProjectId) {
+
+            if (pData.length > 0 && !activeProjectId) {
                 // Keep current selection if valid, else select first
-                if (!activeProjectId || !projectsData.find(p => p.id === activeProjectId)) {
-                    setActiveProjectId(projectsData[0].id);
+                if (!activeProjectId || !pData.find(p => p.id === activeProjectId)) {
+                    setActiveProjectId(pData[0].id);
                 }
-            } else if ((projectsData || []).length === 0) {
+            } else if (pData.length === 0) {
                 setActiveProjectId(null);
             }
-            
+
             // Update cache timestamp on successful fetch
             lastFetchTimeRef.current = Date.now();
         } else {
-            const localProjects = JSON.parse(localStorage.getItem('ws_projects')) || [{ id: 'local_default', name: 'My Tasks', created_at: new Date().toISOString() }];
+            let localProjects = JSON.parse(localStorage.getItem('ws_projects'));
+            // Tier 0 Seeding: 3 dummy projects
+            if (!localProjects || localProjects.length === 0 || localProjects[0].id === 'local_default') {
+                localProjects = [
+                    { id: `local_work_${Date.now()}`, name: 'Work', created_at: new Date().toISOString() },
+                    { id: `local_personal_${Date.now() + 1}`, name: 'Personal', created_at: new Date().toISOString() },
+                    { id: `local_groceries_${Date.now() + 2}`, name: 'Groceries', created_at: new Date().toISOString() }
+                ];
+            }
             const localTasks = JSON.parse(localStorage.getItem('ws_tasks')) || [];
+
             setProjects(localProjects);
             setTasks(localTasks);
-            if (localProjects.length > 0 && !activeProjectId) {
+
+            if (localProjects.length > 0 && (!activeProjectId || !localProjects.find(p => p.id === activeProjectId))) {
                 setActiveProjectId(localProjects[0].id);
             }
         }
@@ -148,7 +184,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
         if (user) {
             // FIX 2: Restored correct Task Update logic
             const { error } = await supabase.from('todos').update(updates).eq('id', taskId);
-            
+
             if (error) {
                 console.error("Error updating task:", error);
                 setTasks(originalTasks); // Revert on error
@@ -255,7 +291,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                 .from('projects')
                 .update({ deleted_at: new Date().toISOString() })
                 .eq('id', projectId);
-                
+
             if (error) { console.error('Error deleting project:', error); }
         }
         const remainingProjects = projects.filter(p => p.id !== projectId);
@@ -344,17 +380,17 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                     <div className="flex-grow overflow-y-auto custom-scrollbar min-h-0">
                         {projects.map(p => (
                             <div key={p.id} className="flex items-center group">
-                                <button 
-                                    onClick={() => setActiveProjectId(p.id)} 
+                                <button
+                                    onClick={() => setActiveProjectId(p.id)}
                                     className={cn("w-full text-left p-2 rounded mb-1 truncate", activeProjectId === p.id ? 'bg-yellow-500/20 text-yellow-400' : 'hover:bg-gray-800')}
                                 >
                                     {p.name}
                                 </button>
                                 {projects.length > 1 && (
-                                    <Button 
-                                        onClick={() => deleteProject(p.id)} 
-                                        variant="ghost" 
-                                        size="icon" 
+                                    <Button
+                                        onClick={() => deleteProject(p.id)}
+                                        variant="ghost"
+                                        size="icon"
                                         className="h-8 w-8 opacity-0 group-hover:opacity-100 text-red-500 hover:bg-red-500/20"
                                     >
                                         <X size={16} />
@@ -363,9 +399,38 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                             </div>
                         ))}
                     </div>
-                    <div className="mt-auto flex gap-2">
-                        <Input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addProject()} placeholder="New project..." className="bg-gray-800 border-gray-700" />
-                        <Button onClick={addProject} size="icon" className="bg-yellow-500 hover:bg-yellow-600"><ListPlus size={20} /></Button>
+                    <div className="mt-auto">
+                        {isAtLimit ? (
+                            userTier === 0 ? (
+                                <TooltipProvider>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <div className="flex gap-2 group cursor-pointer" onClick={() => {
+                                                if (typeof openSignUpModal === 'function') openSignUpModal();
+                                            }}>
+                                                <Input value={newProjectName} readOnly placeholder="Sign in to add more projects..." className="bg-gray-800 border-gray-700 opacity-50 pointer-events-none select-none text-xs sm:text-sm" />
+                                                <Button size="icon" className="bg-yellow-500 opacity-50 w-10 flex-shrink-0 pointer-events-none select-none"><ListPlus size={20} /></Button>
+                                            </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent className="bg-gray-800 border-gray-700 text-white z-50">
+                                            Sign in to add more projects and unlock secure Cloud Sync.
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </TooltipProvider>
+                            ) : (
+                                <PremiumGate featureKey="unlimited_projects" requiredTier={2} lockClassName="absolute -top-2 -right-2">
+                                    <div className="flex gap-2">
+                                        <Input value={newProjectName} readOnly placeholder="Project limit reached..." className="bg-gray-800 border-gray-700 opacity-50 pointer-events-none select-none text-xs sm:text-sm" />
+                                        <Button size="icon" className="bg-yellow-500 opacity-50 w-10 flex-shrink-0 pointer-events-none select-none"><ListPlus size={20} /></Button>
+                                    </div>
+                                </PremiumGate>
+                            )
+                        ) : (
+                            <div className="flex gap-2">
+                                <Input value={newProjectName} onChange={(e) => setNewProjectName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addProject()} placeholder="New project..." className="bg-gray-800 border-gray-700" />
+                                <Button onClick={addProject} size="icon" className="bg-yellow-500 hover:bg-yellow-600 w-10 flex-shrink-0"><ListPlus size={20} /></Button>
+                            </div>
+                        )}
                     </div>
                 </aside>
 
@@ -459,12 +524,12 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
     const [isAddingSubtask, setIsAddingSubtask] = useState(false);
     const [subtaskText, setSubtaskText] = useState('');
     const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
-    
+
     // --- New States ---
     const [isExpanded, setIsExpanded] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [editText, setEditText] = useState(task.task);
-    
+
     const subtaskInputRef = useRef(null);
 
     const subtasks = allTasks.filter(t => t.parent_task_id === task.id).sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
@@ -472,9 +537,9 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
 
     // Handle Adding Subtasks Continuously
     const handleAddSubtask = () => {
-        if (!subtaskText.trim()) { 
-            setIsAddingSubtask(false); 
-            return; 
+        if (!subtaskText.trim()) {
+            setIsAddingSubtask(false);
+            return;
         };
         onAddTask(subtaskText, task.id);
         setSubtaskText('');
@@ -505,23 +570,23 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
             <div className={cn("bg-black/20 p-3 rounded-lg mb-2 border border-transparent hover:border-gray-700/50 transition-all", task.priority === 3 && !task.is_complete && "border-l-4 border-l-red-500")}>
                 <div className="flex items-start justify-between gap-2">
                     <div className="flex items-start gap-3 flex-grow min-w-0 pt-1">
-                        
+
                         {/* 1. COLLAPSE CHEVRON */}
                         {(hasSubtasks || isAddingSubtask) ? (
                             <button onClick={() => setIsExpanded(!isExpanded)} className="text-gray-400 hover:text-white mt-1">
                                 {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
                             </button>
                         ) : (
-                             // Spacer to align checkboxes if no chevron
-                             <div className="w-4" /> 
+                            // Spacer to align checkboxes if no chevron
+                            <div className="w-4" />
                         )}
 
                         <Checkbox checked={task.is_complete} onCheckedChange={(checked) => onUpdate(task.id, { is_complete: !!checked, updated_at: new Date().toISOString() })} className="mt-1 border-gray-600 data-[state=checked]:bg-yellow-500 data-[state=checked]:border-yellow-500" />
-                        
+
                         {/* 2. INLINE EDITING & WRAPPING */}
                         <div className="flex-grow min-w-0">
                             {isEditing ? (
-                                <Input 
+                                <Input
                                     value={editText}
                                     onChange={(e) => setEditText(e.target.value)}
                                     onBlur={handleEditSave}
@@ -530,7 +595,7 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
                                     className="h-7 py-1 bg-gray-900 border-yellow-500 focus-visible:ring-0"
                                 />
                             ) : (
-                                <span 
+                                <span
                                     onClick={() => setIsEditing(true)}
                                     className={cn(
                                         "block cursor-text hover:text-gray-200 transition-all break-words whitespace-pre-wrap pr-2", // WRAPPING FIX
@@ -561,15 +626,15 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
                         )}
                         {task.due_date && <span className={cn("text-xs flex items-center", new Date(task.due_date) < new Date() && !task.is_complete ? "text-red-400 font-bold" : "text-gray-400")}>{format(new Date(task.due_date), "MMM d")}</span>}
                         <PriorityFlag priority={task.priority} />
-                        <TaskActions 
-                            task={task} 
-                            onUpdate={onUpdate} 
-                            onDelete={onDelete} 
+                        <TaskActions
+                            task={task}
+                            onUpdate={onUpdate}
+                            onDelete={onDelete}
                             onToggleSubtaskInput={() => {
                                 setIsAddingSubtask(true);
                                 setIsExpanded(true); // Auto expand when adding
-                            }} 
-                            onSetNotes={() => setIsNotesModalOpen(true)} 
+                            }}
+                            onSetNotes={() => setIsNotesModalOpen(true)}
                         />
                     </div>
                 </div>
@@ -578,20 +643,20 @@ function TaskItem({ task, allTasks, onUpdate, onDelete, onAddTask }) {
                 {(isExpanded || isAddingSubtask) && (
                     <div className="ml-8 mt-2 space-y-2 border-l-2 border-gray-800 pl-4 animate-in slide-in-from-top-1 fade-in duration-200">
                         {subtasks.map(sub => <TaskItem key={sub.id} task={sub} allTasks={allTasks} onUpdate={onUpdate} onDelete={onDelete} onAddTask={onAddTask} />)}
-                        
+
                         {/* 4. CONTINUOUS ADD SUBTASK INPUT */}
                         {isAddingSubtask && (
                             <form onSubmit={(e) => { e.preventDefault(); handleAddSubtask() }} className="flex gap-2 items-center">
-                                <Input 
+                                <Input
                                     ref={subtaskInputRef} // FOCUS REF
-                                    value={subtaskText} 
-                                    onChange={e => setSubtaskText(e.target.value)} 
-                                    onKeyDown={(e) => { if(e.key === 'Escape') setIsAddingSubtask(false); }}
-                                    placeholder="Add sub-task..." 
-                                    className="h-8 bg-gray-800/50 text-sm" 
+                                    value={subtaskText}
+                                    onChange={e => setSubtaskText(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Escape') setIsAddingSubtask(false); }}
+                                    placeholder="Add sub-task..."
+                                    className="h-8 bg-gray-800/50 text-sm"
                                 />
                                 <Button type="submit" size="sm" className="h-8 bg-yellow-500 text-black hover:bg-yellow-600">Add</Button>
-                                <Button type="button" size="sm" variant="ghost" onClick={() => setIsAddingSubtask(false)} className="h-8 w-8 p-0"><X size={14}/></Button>
+                                <Button type="button" size="sm" variant="ghost" onClick={() => setIsAddingSubtask(false)} className="h-8 w-8 p-0"><X size={14} /></Button>
                             </form>
                         )}
                     </div>

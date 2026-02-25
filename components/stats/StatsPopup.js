@@ -2,7 +2,7 @@
 
 import {
     Download, Upload, BarChart, CheckCircle, Clock,
-    BarChart2, PieChart, AlertTriangle, CloudOff, Cloud, 
+    BarChart2, PieChart, AlertTriangle, CloudOff, Cloud,
     Calendar, Trophy, Zap, TrendingUp, Activity, Info
 } from 'lucide-react';
 import useStats from '@/hooks/useStats';
@@ -10,16 +10,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useSubscription } from '@/context/SubscriptionContext';
-import { 
-    Bar, BarChart as RechartsBarChart, ResponsiveContainer, 
-    XAxis, YAxis, Tooltip as RechartsTooltip, Pie, 
-    PieChart as RechartsPieChart, Cell 
+import { useAuth } from '@/context/AuthContext';
+import {
+    Bar, BarChart as RechartsBarChart, ResponsiveContainer,
+    XAxis, YAxis, Tooltip as RechartsTooltip, Pie,
+    PieChart as RechartsPieChart, Cell
 } from 'recharts';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import { format, subDays, eachDayOfInterval, startOfDay, endOfDay, isSameDay } from 'date-fns';
+import { PremiumGate } from '@/components/system/PremiumGate';
 
 // --- SUB-COMPONENTS ---
 
@@ -58,10 +60,10 @@ const DailyTaskRing = ({ done, total }) => {
     );
 };
 
-const tooltipStyle = { 
-    background: "#1F2937", 
-    border: '1px solid #374151', 
-    borderRadius: '0.5rem', 
+const tooltipStyle = {
+    background: "#1F2937",
+    border: '1px solid #374151',
+    borderRadius: '0.5rem',
     fontSize: '12px',
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
 };
@@ -70,15 +72,15 @@ const SimpleWeeklyTrendChart = ({ data }) => {
     const maxMinutes = useMemo(() => {
         if (!data || data.length === 0) return 60;
         const max = Math.max(...data.map(d => d.minutes));
-        return max === 0 ? 60 : Math.ceil(max * 1.2); 
+        return max === 0 ? 60 : Math.ceil(max * 1.2);
     }, [data]);
 
     return (
         <ResponsiveContainer width="100%" height={150}>
             <RechartsBarChart data={data} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
-                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} dy={5}/>
-                <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} domain={[0, maxMinutes]} tickFormatter={(val) => `${val}m`}/>
-                <RechartsTooltip cursor={{fill: 'rgba(255,255,255,0.05)', radius: 4}} contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6', marginBottom: '4px' }} itemStyle={{ color: '#38B2AC' }} labelFormatter={(label, payload) => payload[0]?.payload.fullDate || label}/>
+                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} dy={5} />
+                <YAxis stroke="#4B5563" fontSize={10} tickLine={false} axisLine={false} domain={[0, maxMinutes]} tickFormatter={(val) => `${val}m`} />
+                <RechartsTooltip cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }} contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6', marginBottom: '4px' }} itemStyle={{ color: '#38B2AC' }} labelFormatter={(label, payload) => payload[0]?.payload.fullDate || label} />
                 <Bar dataKey="minutes" fill="#38B2AC" radius={[4, 4, 0, 0]} maxBarSize={40}>
                     {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={index === data.length - 1 ? '#FBBF24' : '#38B2AC'} />))}
                 </Bar>
@@ -88,7 +90,7 @@ const SimpleWeeklyTrendChart = ({ data }) => {
 };
 
 const FocusHistoryChart = ({ data }) => {
-    const [view, setView] = useState('weekly'); 
+    const [view, setView] = useState('weekly');
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const currentData = data[view] || [];
 
@@ -120,26 +122,26 @@ const FocusHistoryChart = ({ data }) => {
             </div>
             <ResponsiveContainer width="100%" height={250}>
                 <RechartsBarChart data={currentData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                    <XAxis 
-                        dataKey="name" 
-                        stroke="#6B7280" 
-                        fontSize={11} 
-                        tickLine={false} 
-                        axisLine={false} 
+                    <XAxis
+                        dataKey="name"
+                        stroke="#6B7280"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
                         dy={5}
                         minTickGap={20}
                     />
-                    <YAxis 
-                        stroke="#6B7280" 
-                        fontSize={10} 
-                        tickLine={false} 
-                        axisLine={false} 
+                    <YAxis
+                        stroke="#6B7280"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
                         domain={yAxisDomain}
                         tickFormatter={(val) => `${val}m`}
                     />
-                    <RechartsTooltip 
-                        cursor={{fill: 'rgba(255,255,255,0.05)', radius: 4}} 
-                        contentStyle={tooltipStyle} 
+                    <RechartsTooltip
+                        cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
+                        contentStyle={tooltipStyle}
                         labelStyle={{ color: '#F9FAFB', fontWeight: '600' }}
                         itemStyle={{ color: '#8B5CF6' }}
                         formatter={(value) => [`${value} mins`, 'Focus Time']}
@@ -154,7 +156,7 @@ const FocusHistoryChart = ({ data }) => {
 
 const FocusByProjectChart = ({ data }) => {
     const COLORS = ['#38B2AC', '#FBBF24', '#60A5FA', '#F87171', '#A78BFA', '#F472B6'];
-    
+
     if (!data || data.length === 0) {
         return (
             <div className="h-[200px] flex flex-col items-center justify-center text-gray-500 text-sm border-2 border-dashed border-gray-700 rounded-lg">
@@ -168,17 +170,17 @@ const FocusByProjectChart = ({ data }) => {
         <div className="relative">
             <ResponsiveContainer width="100%" height={200}>
                 <RechartsPieChart>
-                    <RechartsTooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} formatter={(value) => `${value} mins`}/>
+                    <RechartsTooltip contentStyle={tooltipStyle} itemStyle={{ color: '#fff' }} formatter={(value) => `${value} mins`} />
                     <Pie data={data} dataKey="minutes" nameKey="name" cx="50%" cy="50%" innerRadius={50} outerRadius={75} paddingAngle={5} stroke="none">
                         {data.map((entry, index) => (<Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />))}
                     </Pie>
                 </RechartsPieChart>
             </ResponsiveContainer>
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                 <div className="text-center">
+                <div className="text-center">
                     <span className="text-xs text-gray-400 block">Total</span>
                     <span className="text-lg font-bold text-white">{data.reduce((a, b) => a + b.minutes, 0)}m</span>
-                 </div>
+                </div>
             </div>
         </div>
     )
@@ -187,16 +189,16 @@ const FocusByProjectChart = ({ data }) => {
 const CalendarHeatmap = ({ data }) => {
     const days = useMemo(() => {
         const today = new Date();
-        const startDate = subDays(today, 364); 
+        const startDate = subDays(today, 364);
         return eachDayOfInterval({ start: startDate, end: today });
     }, []);
 
     const getColor = (minutes) => {
-        if (!minutes || minutes === 0) return 'bg-gray-800/50 hover:bg-gray-800'; 
-        if (minutes < 30) return 'bg-emerald-900/40 hover:bg-emerald-900/60';   
-        if (minutes < 60) return 'bg-emerald-700/60 hover:bg-emerald-700/80';   
-        if (minutes < 120) return 'bg-emerald-500/80 hover:bg-emerald-500';     
-        return 'bg-emerald-400 hover:bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.4)]'; 
+        if (!minutes || minutes === 0) return 'bg-gray-800/50 hover:bg-gray-800';
+        if (minutes < 30) return 'bg-emerald-900/40 hover:bg-emerald-900/60';
+        if (minutes < 60) return 'bg-emerald-700/60 hover:bg-emerald-700/80';
+        if (minutes < 120) return 'bg-emerald-500/80 hover:bg-emerald-500';
+        return 'bg-emerald-400 hover:bg-emerald-300 shadow-[0_0_8px_rgba(52,211,153,0.4)]';
     };
 
     return (
@@ -212,7 +214,7 @@ const CalendarHeatmap = ({ data }) => {
                             return (
                                 <Tooltip key={dateKey} delayDuration={0}>
                                     <TooltipTrigger asChild>
-                                        <div 
+                                        <div
                                             className={cn(
                                                 "w-3 h-3 rounded-[2px] transition-all duration-200 cursor-pointer",
                                                 getColor(minutes),
@@ -232,7 +234,7 @@ const CalendarHeatmap = ({ data }) => {
                     </div>
                 </div>
             </TooltipProvider>
-            
+
             <div className="flex items-center justify-end gap-2 text-xs text-gray-500 mt-1">
                 <span>Less</span>
                 <div className="flex gap-1">
@@ -249,13 +251,56 @@ const CalendarHeatmap = ({ data }) => {
 };
 
 export default function StatsPopup({ isOpen, setIsOpen }) {
+    const { user, openSignUpModal } = useAuth();
     const { stats, loading } = useStats();
     const { isPro } = useSubscription();
     const [activeTab, setActiveTab] = useState('dashboard');
-    // --- UPDATED: Toggle State ---
-    const [projectView, setProjectView] = useState('week'); 
-    
+    const [projectView, setProjectView] = useState('week');
+
     const fileInputRef = useRef(null);
+
+    // --- Tier 1: Dummy Data Injector ---
+    const { dummyProjectData, dummyHeatmapData } = useMemo(() => {
+        if (isPro) return { dummyProjectData: null, dummyHeatmapData: null };
+
+        // Synthesize beautiful, fake distribution data
+        const dummyProjectData = {
+            today: [{ name: 'Deep Work', minutes: 120 }, { name: 'Admin', minutes: 45 }, { name: 'Learning', minutes: 60 }],
+            week: [{ name: 'Deep Work', minutes: 840 }, { name: 'Admin', minutes: 210 }, { name: 'Learning', minutes: 320 }, { name: 'Client A', minutes: 150 }]
+        };
+
+        // Synthesize a realistic heatmap shape (past 3 months dense, rest sparse)
+        const dummyHeatmapData = {};
+        const today = new Date();
+        for (let i = 0; i < 365; i++) {
+            const d = subDays(today, i);
+            const key = startOfDay(d).toISOString();
+            // Higher intensity closer to today, dropping off exponentially, with random noise
+            const weight = Math.max(0, 1 - (i / 90));
+            if (Math.random() < weight) {
+                dummyHeatmapData[key] = Math.floor(Math.random() * 120) + 15; // 15 to 135 mins
+            }
+        }
+
+        return { dummyProjectData, dummyHeatmapData };
+    }, [isPro]);
+
+    // --- Tier 0: Data Risk Throttle ---
+    useEffect(() => {
+        if (isOpen && !user) {
+            const lastWarned = localStorage.getItem('stats_risk_popup_last_shown');
+            const now = Date.now();
+            // 24 hours = 86400000 ms
+            if (!lastWarned || (now - parseInt(lastWarned, 10)) > 86400000) {
+                // Since this opens over a dialog, a simple alert or a toast is cleanest.
+                // Using a native alert for immediate, bulletproof priority before they interact.
+                setTimeout(() => {
+                    alert("⚠️ Data at Risk\n\nYou are in Local Mode. Your stats and history are saved only to this browser.\n\nClearing your cache will permanently delete your progress. Sign in to enable Cloud Sync.");
+                    localStorage.setItem('stats_risk_popup_last_shown', now.toString());
+                }, 500); // Small delay to let the modal animate in first
+            }
+        }
+    }, [isOpen, user]);
 
     const handleDownloadBackup = () => {
         try {
@@ -345,8 +390,8 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
 
                 <div className="mt-6 mb-4">
                     <nav className="flex space-x-6 border-b border-gray-800" aria-label="Tabs">
-                        <button 
-                            onClick={() => setActiveTab('dashboard')} 
+                        <button
+                            onClick={() => setActiveTab('dashboard')}
                             className={cn(
                                 "pb-3 px-1 border-b-2 font-medium text-sm transition-all",
                                 activeTab === 'dashboard' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -354,8 +399,8 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                         >
                             Dashboard
                         </button>
-                        <button 
-                            onClick={() => setActiveTab('insights')} 
+                        <button
+                            onClick={() => setActiveTab('insights')}
                             className={cn(
                                 "flex items-center gap-2 pb-3 px-1 border-b-2 font-medium text-sm transition-all",
                                 activeTab === 'insights' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -380,12 +425,12 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                                     <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wide">Total Goal</h3>
                                     <DailyTaskRing done={stats.tasksDoneAllTime} total={stats.totalTasksAllTime} />
                                     <div className="text-xs text-gray-500 text-center px-2">
-                                        {stats.tasksDoneAllTime === stats.totalTasksAllTime && stats.totalTasksAllTime > 0 
-                                            ? "🎉 All tasks completed!" 
+                                        {stats.tasksDoneAllTime === stats.totalTasksAllTime && stats.totalTasksAllTime > 0
+                                            ? "🎉 All tasks completed!"
                                             : "Keep pushing!"}
                                     </div>
                                 </div>
-                                
+
                                 <div className="md:col-span-3 space-y-6">
                                     <div className="grid grid-cols-3 gap-4">
                                         <StatCard icon={<CheckCircle className="h-4 w-4 text-green-400" />} label="Tasks Done" value={stats.tasksDoneToday} unit="" />
@@ -407,32 +452,63 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                         )}
 
                         {activeTab === 'insights' && (
-                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500 relative">
+                                {!user ? (
+                                    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-[#0F1115]/80 backdrop-blur-sm rounded-xl border border-gray-800">
+                                        <div className="bg-gray-900 border border-gray-700 p-8 rounded-2xl shadow-2xl flex flex-col items-center text-center max-w-sm">
+                                            <div className="w-16 h-16 bg-yellow-500/10 rounded-full flex items-center justify-center mb-4 border border-yellow-500/20">
+                                                <AlertTriangle className="w-8 h-8 text-yellow-500" />
+                                            </div>
+                                            <h3 className="text-xl font-bold text-white mb-2">Insights Locked</h3>
+                                            <p className="text-sm text-gray-400 mb-6">
+                                                Sign in to unlock Premium Insights and securely back up your productivity history to the cloud.
+                                            </p>
+                                            <Button
+                                                onClick={() => { setIsOpen(false); openSignUpModal(); }}
+                                                className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold shadow-lg"
+                                            >
+                                                Sign In to Unlock
+                                            </Button>
+                                        </div>
+                                    </div>
+                                ) : null}
+
+                                <div className={cn("grid grid-cols-1 lg:grid-cols-2 gap-6", !user && "opacity-20 pointer-events-none blur-sm")}>
+
+                                    {/* --- Tier 1 Tease Banner --- */}
+                                    {user && !isPro && (
+                                        <div className="lg:col-span-2 bg-yellow-900/20 border border-yellow-500/30 rounded-xl p-3 flex animate-in fade-in items-center justify-center text-center">
+                                            <p className="text-yellow-400 text-sm font-medium">
+                                                <span className="font-bold">Preview Mode:</span> This is how your data will look. Upgrade to Pro to unlock your beautiful historical analytics.
+                                            </p>
+                                        </div>
+                                    )}
+
                                     <Card className="bg-gray-800/20 border-gray-800">
                                         <CardHeader>
                                             <CardTitle className="text-sm font-medium text-gray-400 flex items-center justify-between">
                                                 <div className="flex items-center">
                                                     <PieChart className="mr-2 h-4 w-4" /> Project Distribution
                                                 </div>
-                                                
+
                                                 {/* --- UPDATED: Toggle Buttons --- */}
                                                 <div className="flex bg-gray-800 rounded-md p-0.5 ml-auto">
-                                                    <button 
+                                                    <button
                                                         onClick={() => setProjectView('today')}
-                                                        className={cn("px-2 py-0.5 text-[10px] rounded-sm transition-all", projectView === 'today' ? "bg-gray-700 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                                        className={cn("px-2 py-0.5 text-[10px] rounded-sm transition-all relative z-10", projectView === 'today' ? "bg-gray-700 text-white shadow" : "text-gray-400 hover:text-gray-200")}
                                                     >Today</button>
-                                                    <button 
+                                                    <button
                                                         onClick={() => setProjectView('week')}
-                                                        className={cn("px-2 py-0.5 text-[10px] rounded-sm transition-all", projectView === 'week' ? "bg-gray-700 text-white shadow" : "text-gray-400 hover:text-gray-200")}
+                                                        className={cn("px-2 py-0.5 text-[10px] rounded-sm transition-all relative z-10", projectView === 'week' ? "bg-gray-700 text-white shadow" : "text-gray-400 hover:text-gray-200")}
                                                     >This Week</button>
                                                 </div>
 
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent>
-                                            {/* --- UPDATED: Pass data based on toggle --- */}
-                                            <FocusByProjectChart data={stats.focusByProject[projectView]} />
+                                            <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false}>
+                                                <FocusByProjectChart data={!isPro ? dummyProjectData[projectView] : stats.focusByProject[projectView]} />
+                                            </PremiumGate>
                                         </CardContent>
                                     </Card>
 
@@ -446,34 +522,21 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="flex-grow flex flex-col justify-center">
-                                            <CalendarHeatmap data={stats.productivityHeatmap} />
+                                            <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false}>
+                                                <CalendarHeatmap data={!isPro ? dummyHeatmapData : stats.productivityHeatmap} />
+                                            </PremiumGate>
                                         </CardContent>
                                     </Card>
                                 </div>
 
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                    {/* --- UPDATED: Replaced Today's Focus with Total Days Accessed --- */}
-                                    <StatCard 
-                                        icon={<Calendar className="h-4 w-4 text-yellow-400" />} 
-                                        label="Total Days Accessed" 
-                                        value={stats.daysAccessed} 
-                                        unit="days" 
-                                        colorClass="text-yellow-400"
-                                    />
-                                    
-                                    <StatCard 
-                                        icon={<Trophy className="h-4 w-4 text-orange-400" />} 
-                                        label="Best Day Record" 
-                                        value={stats.bestFocusMinutes} 
-                                        unit="m" 
-                                        subtext={stats.bestDayDate || "No data yet"} 
-                                        colorClass="text-orange-400"
-                                    />
-                                    <StatCard icon={<Clock className="h-4 w-4 text-blue-400" />} label="All Time" value={Math.floor(stats.allTimeFocusMinutes / 60)} unit="h" subtext={`${stats.allTimeFocusMinutes % 60}m remaining`}/>
-                                    <StatCard icon={<TrendingUp className="h-4 w-4 text-green-400" />} label="Growth" value={`${stats.weeklyGrowthPercentage > 0 ? '+' : ''}${stats.weeklyGrowthPercentage}`} unit="%" colorClass={stats.weeklyGrowthPercentage >= 0 ? "text-green-400" : "text-red-400"} subtext="vs Last Week"/>
+                                <div className={cn("grid grid-cols-2 md:grid-cols-4 gap-4", !user && "opacity-20 pointer-events-none blur-sm")}>
+                                    <StatCard icon={<Calendar className="h-4 w-4 text-yellow-400" />} label="Total Days Accessed" value={stats.daysAccessed} unit="days" colorClass="text-yellow-400" />
+                                    <StatCard icon={<Trophy className="h-4 w-4 text-orange-400" />} label="Best Day Record" value={stats.bestFocusMinutes} unit="m" subtext={stats.bestDayDate || "No data yet"} colorClass="text-orange-400" />
+                                    <StatCard icon={<Clock className="h-4 w-4 text-blue-400" />} label="All Time" value={Math.floor(stats.allTimeFocusMinutes / 60)} unit="h" subtext={`${stats.allTimeFocusMinutes % 60}m remaining`} />
+                                    <StatCard icon={<TrendingUp className="h-4 w-4 text-green-400" />} label="Growth" value={`${stats.weeklyGrowthPercentage > 0 ? '+' : ''}${stats.weeklyGrowthPercentage}`} unit="%" colorClass={stats.weeklyGrowthPercentage >= 0 ? "text-green-400" : "text-red-400"} subtext="vs Last Week" />
                                 </div>
 
-                                <Card className="bg-gray-800/20 border-gray-800">
+                                <Card className={cn("bg-gray-800/20 border-gray-800", !user && "opacity-20 pointer-events-none blur-sm")}>
                                     <CardHeader className="py-3 border-b border-gray-800/50">
                                         <CardTitle className="text-sm font-medium text-gray-400 flex items-center">
                                             <BarChart className="mr-2 h-4 w-4" /> Focus History

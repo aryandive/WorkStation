@@ -13,7 +13,7 @@ import { login, signInWithGoogle } from './actions';
 function LoginForm() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const redirectPath = searchParams.get('redirect') || '/journal';
+    const redirectPath = searchParams.get('redirect') || '/';
 
     // UI States
     const [loading, setLoading] = useState(false);

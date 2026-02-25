@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 // --- Icons & UI ---
-import { 
-    Search, Loader2, PanelTopClose, PanelTopOpen, AlertTriangle, Home, Crown 
+import {
+    Search, Loader2, PanelTopClose, PanelTopOpen, AlertTriangle, Home, Crown
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -27,6 +27,9 @@ import JournalCalendar from '@/components/journal/JournalCalendar';
 import TextEditor from '@/components/journal/TextEditor';
 import SignUpModal from '@/components/auth/SignUpModal';
 import JournalEntriesModal from '@/components/journal/JournalEntriesModal';
+import SnapshotsModal from '@/components/journal/SnapshotsModal';
+import HabitStreak from '@/components/journal/HabitStreak';
+import { calculateStreaks } from '@/lib/streakUtils';
 
 export default function JournalPage() {
     // --- Auth & Data State ---
@@ -34,16 +37,17 @@ export default function JournalPage() {
     const { isPro, loading: subLoading } = useSubscription();
     const router = useRouter();
     const supabase = createClient();
-    
+
     // --- UI State ---
     const [greeting, setGreeting] = useState('');
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-    const [displayName, setDisplayName] = useState(''); 
+    const [displayName, setDisplayName] = useState('');
     const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState('signup');
     const [isEntriesListOpen, setIsEntriesListOpen] = useState(false);
     const [isDataRiskModalOpen, setIsDataRiskModalOpen] = useState(false);
-    
+    const [isSnapshotOpen, setIsSnapshotOpen] = useState(false);
+
     // --- Journal State ---
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [entry, setEntry] = useState({ id: null, date: null, title: '', content: '' });
@@ -55,6 +59,7 @@ export default function JournalPage() {
     // --- Search State ---
     const [searchQuery, setSearchQuery] = useState('');
     const [filteredEntryDays, setFilteredEntryDays] = useState(null);
+    const [streaks, setStreaks] = useState({ current: 0, best: 0 });
 
     // --- Stats State ---
     const [dailyStats, setDailyStats] = useState({
@@ -92,7 +97,7 @@ export default function JournalPage() {
     // --- Data Fetching ---
     const fetchJournalEntries = useCallback(async () => {
         if (isLoading) return;
-        if (user && isPro) {
+        if (user) {
             const { data, error } = await supabase.from('journal_entries').select('id, date, title, user_id').eq('user_id', user.id);
             if (error) { console.error("Error fetching journal entries:", error); setAllEntries({}); }
             else {
@@ -103,14 +108,17 @@ export default function JournalPage() {
                     return acc;
                 }, {});
                 setAllEntries(entriesMap);
+                setStreaks(calculateStreaks(data));
             }
         } else {
-            setAllEntries(getLocalJournals());
+            const localData = getLocalJournals();
+            setAllEntries(localData);
+            setStreaks(calculateStreaks(Object.values(localData)));
         }
     }, [user, isPro, isLoading, supabase]);
 
     const fetchEntryContent = useCallback(async (dateKey) => {
-        if (!user || !isPro) return null;
+        if (!user) return null;
         const [y, m, d] = dateKey.split('-').map(Number);
         const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         const { data, error } = await supabase.from('journal_entries').select('content').eq('user_id', user.id).eq('date', isoDate).single();
@@ -166,27 +174,49 @@ export default function JournalPage() {
 
     useEffect(() => {
         const count = Object.keys(allEntries).length;
-        const limit = isPro ? 365 : 30;
+        const limit = isPro ? 365 : 100; // Visual goal for the ring
         const percentage = Math.min(100, (count / limit) * 100);
-        setDailyStats(prev => ({ ...prev, entries: { percentage, value: `${count}/${limit}`, limit } }));
+        setDailyStats(prev => ({ ...prev, entries: { percentage, value: `${count}`, limit } }));
     }, [allEntries, isPro]);
 
     useEffect(() => { fetchJournalEntries(); }, [fetchJournalEntries]);
 
-    // Risk Popup Logic
+    // Migration Hook: Anonymous (Tier 0) -> Free (Tier 1)
     useEffect(() => {
-        if (user && !isPro && !isLoading) {
+        if (user && !isLoading) {
+            const localJournals = getLocalJournals();
+            if (Object.keys(localJournals).length > 0) {
+                const migrate = async () => {
+                    const payload = Object.entries(localJournals).map(([dateKey, data]) => {
+                        const [y, m, d] = dateKey.split('-').map(Number);
+                        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        return { user_id: user.id, date: isoDate, title: data.title, content: data.content };
+                    });
+                    const { error } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' });
+                    if (!error) {
+                        localStorage.removeItem('ws_journal_entries');
+                        fetchJournalEntries();
+                    }
+                };
+                migrate();
+            }
+        }
+    }, [user, isLoading, supabase, fetchJournalEntries]);
+
+    // Risk Popup Logic (Tier 0 Only)
+    useEffect(() => {
+        if (!user && !isLoading) {
             const lastWarned = localStorage.getItem('journal_data_risk_popup_last_shown');
             const now = Date.now();
             const oneDay = 24 * 60 * 60 * 1000;
             if (!lastWarned || (now - parseInt(lastWarned)) > oneDay) {
-                 if (Object.keys(getLocalJournals()).length > 0) {
-                     setIsDataRiskModalOpen(true);
-                     localStorage.setItem('journal_data_risk_popup_last_shown', now.toString());
-                 }
+                if (Object.keys(getLocalJournals()).length > 0) {
+                    setIsDataRiskModalOpen(true);
+                    localStorage.setItem('journal_data_risk_popup_last_shown', now.toString());
+                }
             }
         }
-    }, [user, isPro, isLoading]);
+    }, [user, isLoading]);
 
     // Load Content Logic
     useEffect(() => {
@@ -195,11 +225,11 @@ export default function JournalPage() {
         const defaultTitle = selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
         const updateEntryState = (entryData) => {
-             setEntry({
+            setEntry({
                 id: entryData?.id || null,
                 date: dateKey,
                 title: entryData?.title || defaultTitle,
-                content: entryData?.content || '' 
+                content: entryData?.content || ''
             });
         };
 
@@ -208,11 +238,11 @@ export default function JournalPage() {
                 updateEntryState(cachedEntry);
                 return;
             }
-            if (cachedEntry && user && isPro) {
+            if (cachedEntry && user) {
                 const currentEntry = entryRef.current;
                 const isSameDate = currentEntry.date === dateKey;
                 const hasContentAlready = currentEntry.content && currentEntry.content.replace(/<[^>]*>/g, '').trim() !== '';
-                
+
                 if (isSameDate && hasContentAlready) {
                     updateEntryState(currentEntry);
                     return;
@@ -224,12 +254,12 @@ export default function JournalPage() {
                 setIsContentLoading(false);
 
                 if (!content || content.trim() === '') {
-                     setAllEntries(prev => {
+                    setAllEntries(prev => {
                         const copy = { ...prev };
                         delete copy[dateKey];
                         return copy;
-                     });
-                     updateEntryState(null);
+                    });
+                    updateEntryState(null);
                 } else {
                     const fullEntry = { ...cachedEntry, content: content };
                     setAllEntries(prev => ({ ...prev, [dateKey]: fullEntry }));
@@ -240,7 +270,7 @@ export default function JournalPage() {
             updateEntryState(null);
         };
         loadContent();
-    }, [selectedDate, allEntries, fetchEntryContent, user, isPro]);
+    }, [selectedDate, allEntries, fetchEntryContent, user]);
 
     useEffect(() => {
         const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -268,11 +298,11 @@ export default function JournalPage() {
             return;
         }
 
-        if (user && isPro) {
+        if (user) {
             if (isEmpty && newEntry.id) {
                 await supabase.from('journal_entries').delete().eq('id', newEntry.id);
                 setAllEntries(prev => { const copy = { ...prev }; delete copy[dateKey]; return copy; });
-                setEntry(prev => ({...prev, id: null}));
+                setEntry(prev => ({ ...prev, id: null }));
             } else if (!isEmpty) {
                 const y = selectedDate.getFullYear();
                 const m = selectedDate.getMonth() + 1;
@@ -280,7 +310,7 @@ export default function JournalPage() {
                 const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                 const payload = { user_id: user.id, date: isoDate, title: newEntry.title, content: newEntry.content };
                 if (newEntry.id) payload.id = newEntry.id;
-                
+
                 const { data } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' }).select().single();
                 if (data) {
                     setAllEntries(prev => ({ ...prev, [dateKey]: data }));
@@ -317,11 +347,12 @@ export default function JournalPage() {
         <div className="min-h-screen w-full bg-gray-950 text-gray-100 font-sans flex flex-col">
             <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} mode={modalMode} />
             <JournalEntriesModal isOpen={isEntriesListOpen} setIsOpen={setIsEntriesListOpen} allEntries={allEntries} onSelectEntry={safeSetSelectedDate} />
-            
-             <Dialog open={isDataRiskModalOpen} onOpenChange={setIsDataRiskModalOpen}>
+            <SnapshotsModal isOpen={isSnapshotOpen} setIsOpen={setIsSnapshotOpen} date={selectedDate} />
+
+            <Dialog open={isDataRiskModalOpen} onOpenChange={setIsDataRiskModalOpen}>
                 <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-md">
                     <DialogHeader>
-                        <DialogTitle className="flex items-center gap-2 text-yellow-500"><AlertTriangle className="w-5 h-5"/> Data Warning</DialogTitle>
+                        <DialogTitle className="flex items-center gap-2 text-yellow-500"><AlertTriangle className="w-5 h-5" /> Data Warning</DialogTitle>
                         <DialogDescription className="text-gray-300">
                             You are on the <strong>Free Plan</strong>. Your journal entries are stored <strong>locally on this device</strong>.
                         </DialogDescription>
@@ -330,10 +361,10 @@ export default function JournalPage() {
                         <p>If you clear your browser history or cookies, <strong>you will lose your data forever.</strong></p>
                     </div>
                     <DialogFooter className="gap-2 sm:gap-0">
-                         <Button variant="ghost" onClick={() => setIsDataRiskModalOpen(false)}>I Understand</Button>
-                         <Button className="bg-yellow-500 text-black hover:bg-yellow-400 font-bold" asChild>
+                        <Button variant="ghost" onClick={() => setIsDataRiskModalOpen(false)}>I Understand</Button>
+                        <Button className="bg-yellow-500 text-black hover:bg-yellow-400 font-bold" asChild>
                             <Link href="/landing">Secure My Data (Upgrade)</Link>
-                         </Button>
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -380,7 +411,7 @@ export default function JournalPage() {
                 </div>
 
                 <main className="flex-grow flex flex-col lg:flex-row gap-5 h-full">
-                    <aside className={cn("w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 overflow-hidden", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
+                    <aside className={cn("w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 lg:sticky lg:top-6 lg:self-start lg:h-fit overflow-hidden", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
                             <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">Today</button>
                             <div className="relative w-full">
@@ -388,38 +419,10 @@ export default function JournalPage() {
                                 <input type="search" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all" />
                             </div>
                         </div>
-                        
-                        <JournalCalendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
-                        <ReflectivePrompt dailyStats={dailyStats} />
 
-                        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
-                            {!user ? (
-                                <div className="text-center">
-                                    <h3 className="font-bold text-white mb-1">Journal Entries</h3>
-                                    <p className="text-xs text-gray-400 mb-3">Sign in to save securely.</p>
-                                    <Button asChild size="sm" className="w-full bg-yellow-500 text-gray-900 hover:bg-yellow-400 font-bold"><Link href="/login">Sign In</Link></Button>
-                                </div>
-                            ) : !isPro ? (
-                                <>
-                                    <div className="flex items-center justify-between mb-2">
-                                        <Label className="font-medium text-white text-sm">Free Plan</Label>
-                                        <span className="text-xs text-gray-400">{journalEntryCount} / 30 entries</span>
-                                    </div>
-                                    <div className="w-full bg-gray-700 rounded-full h-2 mb-3">
-                                        <div className="bg-yellow-500 h-2 rounded-full transition-all duration-500" style={{ width: `${(journalEntryCount / 30) * 100}%` }}></div>
-                                    </div>
-                                    <Button asChild size="sm" variant="outline" className="w-full border-yellow-500 text-yellow-400 hover:bg-yellow-500/10"><Link href="/landing">Upgrade to Unlimited</Link></Button>
-                                </>
-                            ) : (
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <Crown size={18} className="text-yellow-400" />
-                                        <span className="font-bold text-white text-sm">Unlimited Access</span>
-                                    </div>
-                                    <span className="text-[10px] font-bold text-black bg-yellow-500 px-2 py-0.5 rounded-full uppercase tracking-wider">Pro</span>
-                                </div>
-                            )}
-                        </div>
+                        <JournalCalendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
+                        <HabitStreak current={streaks.current} best={streaks.best} />
+                        <ReflectivePrompt dailyStats={dailyStats} />
                     </aside>
 
                     <div {...editorWrapperProps} className="flex-grow min-h-[500px] lg:h-auto">
@@ -439,6 +442,7 @@ export default function JournalPage() {
                             onNavigate={changeDate}
                             isContentLoading={isContentLoading}
                             onEntriesClick={() => setIsEntriesListOpen(true)}
+                            onSnapshotClick={() => setIsSnapshotOpen(true)}
                         />
                     </div>
                 </main>

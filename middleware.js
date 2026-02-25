@@ -28,6 +28,7 @@ export async function middleware(req) {
         '/terms',
         '/help',
         '/landing',
+        '/journal',
         '/auth/callback',
         '/api/paypal/webhook' // Crucial: ensure payment webhooks aren't blocked
     ];
@@ -36,20 +37,20 @@ export async function middleware(req) {
     const isPublic = publicPaths.some((p) => path === p || path.startsWith(p + '/'));
 
     // 4. Redirect Logic
-    
+
     // SCENARIO A: Unauthenticated User trying to access a Protected Route
     if (!user && !isPublic) {
         // Redirect to login
         url.pathname = '/login';
         // Optional: Save the intended destination to redirect back after login
-        url.searchParams.set('next', path); 
+        url.searchParams.set('next', path);
         return NextResponse.redirect(url);
     }
 
     // SCENARIO B: Authenticated User trying to access Auth Routes (Login/Signup)
     if (user && (path === '/login' || path === '/signup')) {
-        // Redirect to the dashboard/journal
-        url.pathname = '/journal';
+        // Redirect to the dashboard/home
+        url.pathname = '/';
         return NextResponse.redirect(url);
     }
 

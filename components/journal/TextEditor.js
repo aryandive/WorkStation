@@ -2,29 +2,31 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import { 
-    Bold, Italic, List, Heading1, Heading2, Type as ParagraphIcon, 
-    Loader2, Edit, Lock, History, Hourglass, Save, 
+import {
+    Bold, Italic, List, Heading1, Heading2, Type as ParagraphIcon,
+    Loader2, Edit, Lock, History, Hourglass, Save,
     ChevronLeft, ChevronRight, Crown, Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ActivityRings from './ActivityRings';
+import { PremiumGate } from '@/components/system/PremiumGate';
 
-const TextEditor = forwardRef(({ 
-    entry, 
-    onEntryChange, 
+const TextEditor = forwardRef(({
+    entry,
+    onEntryChange,
     dailyStats,
     isPro,
     user,
-    isPastDate, 
-    isFutureDate, 
-    isEditMode, 
-    setIsEditMode, 
-    isSavingDisabled, 
-    saveStatus, 
+    isPastDate,
+    isFutureDate,
+    isEditMode,
+    setIsEditMode,
+    isSavingDisabled,
+    saveStatus,
     isContentLoading,
     onNavigate,
-    onEntriesClick
+    onEntriesClick,
+    onSnapshotClick
 }, ref) => {
     const editorRef = useRef(null);
     const [localTitle, setLocalTitle] = useState(entry?.title || '');
@@ -64,19 +66,19 @@ const TextEditor = forwardRef(({
     useEffect(() => {
         // When the date changes, we MUST reset the internal state immediately.
         setLocalTitle(entry?.title || '');
-        
+
         if (editorRef.current) {
             // Force overwrite the editor content with the new entry's content (or empty string)
             editorRef.current.innerHTML = entry?.content || '';
         }
-        
+
         // Update the ref so we don't accidentally save the OLD content to the NEW date
         latestForFlushRef.current = { title: entry?.title || '', content: entry?.content || '' };
-        
+
         // Reset formats
         setActiveFormats({ bold: false, italic: false, list: false, h1: false, h2: false, p: false });
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [entry?.date]); // Dependency: Only run when DATE changes
 
     // --- Ghost Text / Async Load Fix ---
@@ -87,7 +89,7 @@ const TextEditor = forwardRef(({
             const currentText = editorRef.current.innerText.trim();
             const hasNoText = currentText.length === 0;
             const hasNoMedia = !currentHTML.includes('<img');
-            
+
             // Safety: Only overwrite if editor is effectively empty OR if content matches exactly
             // This prevents overwriting user's typing if they started before load finished
             if ((hasNoText && hasNoMedia) || currentHTML === entry.content) {
@@ -102,9 +104,9 @@ const TextEditor = forwardRef(({
         // If we are saving or just typed (local title diff/content diff), we are 'dirty'
         // leveraging the existing saveStatus prop is the most reliable way.
         const isUnsaved = saveStatus === 'saving' || saveStatus === 'unsaved';
-        
-        const event = new CustomEvent('sys-journal-status', { 
-            detail: { isUnsaved } 
+
+        const event = new CustomEvent('sys-journal-status', {
+            detail: { isUnsaved }
         });
         window.dispatchEvent(event);
     }, [saveStatus]);
@@ -168,7 +170,7 @@ const TextEditor = forwardRef(({
                         </Button>
                         <div className="relative flex-grow">
                             <input
-                                value={localTitle} 
+                                value={localTitle}
                                 onChange={handleTitleChange}
                                 disabled={isLocked}
                                 className="bg-transparent text-xl md:text-3xl font-bold w-full focus:outline-none border-b-2 border-transparent focus:border-yellow-500 transition-all pb-1 disabled:opacity-70 placeholder:text-gray-600"
@@ -213,7 +215,11 @@ const TextEditor = forwardRef(({
                 )}
 
                 {/* Activity Rings Integration */}
-                <ActivityRings stats={dailyStats} onEntriesClick={onEntriesClick} />
+                <PremiumGate featureKey="journal_insights" requiredTier={2} lockClassName="absolute -top-2 -right-2">
+                    <div onClick={onSnapshotClick} className="cursor-pointer">
+                        <ActivityRings stats={dailyStats} onEntriesClick={(e) => { e.stopPropagation(); onEntriesClick(); }} />
+                    </div>
+                </PremiumGate>
             </div>
 
             {/* Formatting Toolbar */}
@@ -225,7 +231,7 @@ const TextEditor = forwardRef(({
                 <div className="w-px h-5 bg-gray-700 mx-2 hidden md:block"></div>
                 <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.h1)} onClick={() => formatDoc('formatBlock', 'h1')} aria-label="Heading 1"><Heading1 size={16} /></button>
                 <button onMouseDown={onToolbarMouseDown} className={getBtnClass(activeFormats.h2)} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={16} /></button>
-                
+
                 <div className="ml-auto flex items-center gap-2">
                     {(isPastDate || isFutureDate) && !isEditMode && (
                         <Button onClick={() => setIsEditMode(true)} size="sm" className="bg-yellow-500 hover:bg-yellow-600 text-gray-900 h-8 text-xs" disabled={isSavingDisabled}>
@@ -250,7 +256,7 @@ const TextEditor = forwardRef(({
                         </div>
                     </div>
                 )}
-                
+
                 {/* Past Date Empty State */}
                 {isPastDate && isEmpty && !isEditMode && !isContentLoading && (
                     <div onClick={() => setIsEditMode(true)} className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-gray-900/60 backdrop-blur-sm cursor-pointer hover:bg-gray-900/50 transition-all group">
