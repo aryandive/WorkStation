@@ -51,7 +51,7 @@ export default function SuccessPage() {
                     onClick={() => router.push('/journal')}
                     className="w-full h-14 text-lg font-bold bg-gradient-to-r from-yellow-500 to-amber-500 text-black hover:scale-105 transition-transform shadow-[0_0_20px_rgba(234,179,8,0.3)] rounded-xl"
                 >
-                    Enter WorkStation <ArrowRight className="ml-2 w-5 h-5" />
+                    Enter SyncFlowState <ArrowRight className="ml-2 w-5 h-5" />
                 </Button>
             </div>
         </div>

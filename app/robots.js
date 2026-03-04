@@ -3,11 +3,10 @@
  */
 export default function robots() {
     // TODO: Replace this with your actual production domain
-    // const baseUrl = 'https://workstationfocus.com'; 
-    const baseUrl = 'https://work-station-ten.vercel.app/';  // Update this
+    const baseUrl = 'https://syncflowstate.com/';  // Update this
   
     return {
-      rules: {
+      rules: {  
         userAgent: '*',
         allow: '/',
         disallow: [

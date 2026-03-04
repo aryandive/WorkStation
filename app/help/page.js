@@ -65,7 +65,7 @@ export default function HelpPage() {
         },
         {
             question: "What is the refund policy for the Lifetime Deal?",
-            answer: "We offer a strict 14-day refund window for the Lifetime Deal only. This is not an 'automatic' refund button. To request a refund, you must email support@workstation.com within 14 days of purchase with a VALID reason. We review every request manually to prevent system exploitation. If the reason is not valid (e.g., you just wanted to use it for free for two weeks), the request will be denied.",
+            answer: "We offer a strict 14-day refund window for the Lifetime Deal only. This is not an 'automatic' refund button. To request a refund, you must email support@syncflowstate.com within 14 days of purchase with a VALID reason. We review every request manually to prevent system exploitation. If the reason is not valid (e.g., you just wanted to use it for free for two weeks), the request will be denied.",
             icon: ShieldAlert
         },
         {
@@ -75,7 +75,7 @@ export default function HelpPage() {
         },
         {
             question: "Where do I send refund requests?",
-            answer: "All refund requests must be sent directly to support@workstation.com. Please include your PayPal Transaction ID and your specific reason for the request.",
+            answer: "All refund requests must be sent directly to support@syncflowstate.com. Please include your PayPal Transaction ID and your specific reason for the request.",
             icon: Mail
         }
     ];

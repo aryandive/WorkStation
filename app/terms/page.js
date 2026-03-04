@@ -39,7 +39,7 @@ export default function TermsPage() {
                                 </p>
                                 <ul className="list-disc pl-5 space-y-2 marker:text-yellow-500">
                                     <li>
-                                        <strong>Eligibility:</strong> You must email <strong className="text-white">support@workstation.com</strong> within 14 calendar days of purchase.
+                                        <strong>Eligibility:</strong> You must email <strong className="text-white">support@syncflowstate.com</strong> within 14 calendar days of purchase.
                                     </li>
                                     <li>
                                         <strong>Condition:</strong> You must provide a valid reason why the software did not meet your expectations. We value your feedback to improve the product.
@@ -63,10 +63,10 @@ export default function TermsPage() {
                                 2. Introduction
                             </h2>
                             <p className="mb-4">
-                                Welcome to WorkStation. By accessing or using our website and application, you agree to be bound by these Terms and Conditions. If you disagree with any part of the terms, you may not access the service.
+                                Welcome to SyncFlowState. By accessing or using our website and application, you agree to be bound by these Terms and Conditions. If you disagree with any part of the terms, you may not access the service.
                             </p>
                             <p>
-                                WorkStation is a project built and maintained by an independent student developer. While we strive for professional reliability, you acknowledge that this is not an enterprise-grade service with 24/7 support teams.
+                                SyncFlowState is a project built and maintained by an independent student developer. While we strive for professional reliability, you acknowledge that this is not an enterprise-grade service with 24/7 support teams.
                             </p>
                         </section>
 
@@ -84,7 +84,7 @@ export default function TermsPage() {
                         <section>
                             <h2 className="text-2xl font-bold text-white mb-4">4. Intellectual Property</h2>
                             <p className="mb-4">
-                                The Service and its original content (excluding Content provided by users), features, and functionality are and will remain the exclusive property of WorkStation and its developer.
+                                The Service and its original content (excluding Content provided by users), features, and functionality are and will remain the exclusive property of SyncFlowState and its developer.
                             </p>
                             <p>
                                 <strong>Your Data:</strong> You retain all rights to the journal entries, tasks, and personal data you create within the app. We claim no ownership over your personal content.
@@ -104,7 +104,7 @@ export default function TermsPage() {
                                 The Service is provided on an &quot;AS IS&quot; and &quot;AS AVAILABLE&quot; basis. The developer makes no representations or warranties of any kind, express or implied, regarding the operation of the service.
                             </p>
                             <p>
-                                In no event shall WorkStation or its developer be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from:
+                                In no event shall SyncFlowState or its developer be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from:
                             </p>
                             <ul className="list-disc pl-5 space-y-1 text-sm">
                                 <li>Your access to or use of or inability to access or use the Service;</li>
@@ -131,8 +131,8 @@ export default function TermsPage() {
                             <p>
                                 If you have any questions about these Terms, please contact us at:
                                 <br />
-                                <a href="mailto:support@workstation.com" className="text-yellow-400 hover:underline mt-2 inline-block">
-                                    support@workstation.com
+                                <a href="mailto:support@syncflowstate.com" className="text-yellow-400 hover:underline mt-2 inline-block">
+                                    support@syncflowstate.com
                                 </a>
                             </p>
                         </section>
