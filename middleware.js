@@ -5,12 +5,15 @@ export async function middleware(req) {
     // 1. Create the client and refresh the session cookies
     const { supabase, response } = createClient(req);
 
-    // 2. secure: Use getUser() instead of getSession()
-    // getUser validates the auth token against the Supabase database, ensuring 
-    // the user hasn't been deleted or the token revoked.
+    // 2. Fast Edge Auth: Use getSession() instead of getUser()
+    // getSession() decodes the JWT locally without a database round-trip,
+    // which significantly reduces latency on every page load.
+    // NOTE: Strict validation (getUser) should still be used in protected API routes/Server Actions.
     const {
-        data: { user },
-    } = await supabase.auth.getUser();
+        data: { session },
+    } = await supabase.auth.getSession();
+
+    const user = session?.user || null;
 
     // 3. Define Protected vs. Public Routes
     const url = req.nextUrl.clone();
@@ -29,6 +32,8 @@ export async function middleware(req) {
         '/help',
         '/landing',
         '/journal',
+        '/tasks',
+        '/pomodoro',
         '/auth/callback',
         '/api/paypal/webhook' // Crucial: ensure payment webhooks aren't blocked
     ];

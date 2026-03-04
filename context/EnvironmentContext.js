@@ -5,10 +5,12 @@ import { ANIMATED_SCENES } from '@/lib/environmentConfig';
 
 const EnvironmentContext = createContext(null);
 
-const DEFAULT_SCENE = { 
-    type: 'video', 
-    path: '/videos/cosy.mp4',
-    name: 'Cosy Ambience'
+const DEFAULT_SCENE = {
+    type: 'youtube-scene',
+    videoId: 'Ga6FD1lDnck',
+    thumbnail: 'https://img.youtube.com/vi/Ga6FD1lDnck/maxresdefault.jpg',
+    name: 'Adventure Time',
+    path: null
 };
 
 export function EnvironmentProvider({ children }) {
@@ -18,7 +20,7 @@ export function EnvironmentProvider({ children }) {
     const [soundVolumes, setSoundVolumes] = useState({});
     const [youtube, setYoutube] = useState({ id: null, showPlayer: true, isMuted: true, showControls: false });
     const [isGlobalPlaying, setIsGlobalPlaying] = useState(true);
-    const [isLoaded, setIsLoaded] = useState(false); 
+    const [isLoaded, setIsLoaded] = useState(false);
 
     // --- NEW: Audio Mechanics State ---
     const [loadingSounds, setLoadingSounds] = useState({}); // { '/path/rain.mp3': true }

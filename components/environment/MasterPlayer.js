@@ -3,7 +3,7 @@
 import { useEnvironment } from '@/context/EnvironmentContext';
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { VolumeX } from 'lucide-react'; 
+import { VolumeX } from 'lucide-react';
 
 // --- UPDATED: Smart Sound Player ---
 const SoundPlayer = ({ src, volume, isPlaying, setSoundLoading, reportAudioError }) => {
@@ -37,10 +37,10 @@ const SoundPlayer = ({ src, volume, isPlaying, setSoundLoading, reportAudioError
     }, [volume, isPlaying, src, reportAudioError]);
 
     return (
-        <audio 
-            ref={audioRef} 
-            src={src} 
-            loop 
+        <audio
+            ref={audioRef}
+            src={src}
+            loop
             onWaiting={() => setSoundLoading(src, true)}   // Buffering started
             onPlaying={() => setSoundLoading(src, false)}  // Buffering finished
             onCanPlay={() => setSoundLoading(src, false)}  // Ready to play
@@ -49,11 +49,11 @@ const SoundPlayer = ({ src, volume, isPlaying, setSoundLoading, reportAudioError
 };
 
 export default function MasterPlayer() {
-    const { 
+    const {
         activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying, isLoaded,
-        setSoundLoading, reportAudioError, audioAllowed, resolveAudioError 
+        setSoundLoading, reportAudioError, audioAllowed, resolveAudioError
     } = useEnvironment();
-    
+
     const videoRef = useRef(null);
     const [isVideoReady, setIsVideoReady] = useState(false);
 
@@ -89,13 +89,13 @@ export default function MasterPlayer() {
     };
 
     return (
-        <div 
+        <div
             className="fixed inset-0 w-full h-full z-0 bg-black select-none"
-            onContextMenu={protectMedia} 
+            onContextMenu={protectMedia}
         >
             {/* --- NEW: Autoplay Blocker Overlay --- */}
             {!audioAllowed && activeSounds.length > 0 && (
-                <div 
+                <div
                     onClick={resolveAudioError}
                     className="absolute top-24 left-1/2 -translate-x-1/2 z-[100] bg-red-900/90 hover:bg-red-800 text-white px-6 py-3 rounded-full cursor-pointer shadow-2xl border border-red-500/50 flex items-center gap-3 animate-bounce"
                 >
@@ -106,14 +106,13 @@ export default function MasterPlayer() {
 
             {/* --- LAYER 1: POSTER --- */}
             {(activeScene.type === 'image' || activeScene.type === 'youtube-scene' || activeScene.type === 'video') && (
-                <div 
-                    className={`absolute inset-0 z-10 transition-opacity duration-1000 ease-in-out pointer-events-none ${
-                        activeScene.type === 'image' ? 'opacity-100' : (isVideoReady ? 'opacity-0' : 'opacity-100')
-                    }`}
-                    style={{ backgroundColor: '#0f0f0f' }} 
+                <div
+                    className={`absolute inset-0 z-10 transition-opacity duration-1000 ease-in-out pointer-events-none ${activeScene.type === 'image' ? 'opacity-100' : (isVideoReady ? 'opacity-0' : 'opacity-100')
+                        }`}
+                    style={{ backgroundColor: '#0f0f0f' }}
                 >
-                     <Image
-                        src={activeScene.thumbnail || activeScene.path || '/placeholder.webp'}
+                    <Image
+                        src={activeScene.type === 'video' ? (activeScene.thumbnail || '/placeholder.webp') : (activeScene.thumbnail || activeScene.path || '/placeholder.webp')}
                         alt="Background Ambience"
                         fill
                         priority
@@ -134,7 +133,7 @@ export default function MasterPlayer() {
             {activeScene.type === 'video' && (
                 <video
                     ref={videoRef}
-                    key={activeScene.path} 
+                    key={activeScene.path}
                     src={activeScene.path}
                     className="absolute inset-0 w-full h-full object-cover"
                     autoPlay={isGlobalPlaying}
@@ -148,9 +147,9 @@ export default function MasterPlayer() {
 
             {/* --- LAYER 3: YOUTUBE SCENE --- */}
             {activeScene.type === 'youtube-scene' && (
-                 <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
+                <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vh]">
-                         <iframe
+                        <iframe
                             src={bgYoutubeSrc}
                             title="Background Ambience"
                             className="w-full h-full border-0 pointer-events-none"
@@ -159,7 +158,7 @@ export default function MasterPlayer() {
                             onLoad={handleVideoLoad}
                         />
                     </div>
-                 </div>
+                </div>
             )}
 
             {/* --- LAYER 4: STUDY MODE --- */}

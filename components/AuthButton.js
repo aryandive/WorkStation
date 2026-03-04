@@ -27,6 +27,8 @@ export default function AuthButton() {
     const router = useRouter();
     const supabase = createClient();
 
+    const [loading, setLoading] = useState(true);
+
     // Helper to fetch profile name
     const fetchProfile = async (userId) => {
         if (!userId) return;
@@ -41,17 +43,19 @@ export default function AuthButton() {
             const currentUser = session?.user ?? null;
             setUser(currentUser);
             if (currentUser) fetchProfile(currentUser.id);
+            setLoading(false);
         });
 
         const getInitialUser = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             setUser(user);
             if (user) fetchProfile(user.id);
+            setLoading(false);
         }
         getInitialUser();
 
         return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [supabase]);
 
     const signOut = async () => {
@@ -64,6 +68,12 @@ export default function AuthButton() {
     const handleProfileUpdate = () => {
         if (user) fetchProfile(user.id);
     };
+
+    if (loading) {
+        return (
+            <div className="w-10 h-10 rounded-full bg-zinc-800 animate-pulse"></div>
+        );
+    }
 
     if (!user) {
         return (

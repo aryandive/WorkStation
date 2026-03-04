@@ -17,13 +17,10 @@ const nextConfig = {
         ],
     },
     experimental: {
-        // "allowedDevOrigins" is often flagged as invalid. 
-        // We use "serverActions.allowedOrigins" instead, which solves the Ngrok host issue.
         serverActions: {
-            allowedOrigins: [
-                'localhost:3000',
-                'expostulatory-jeanine-vaccinial.ngrok-free.dev', // Your Ngrok domain
-            ],
+            allowedOrigins: process.env.NODE_ENV === 'development'
+                ? ['localhost:3000', 'expostulatory-jeanine-vaccinial.ngrok-free.dev']
+                : [], // In production, Vercel allows the hosted domain by default
         },
     },
 };

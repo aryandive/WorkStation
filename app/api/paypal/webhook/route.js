@@ -22,18 +22,14 @@ export async function POST(request) {
     }
 
     // 1. SECURITY: Verify Signature
-    if (process.env.NODE_ENV !== 'development') {
-        try {
-            await verifyPayPalWebhook(headersList, rawBody);
-            console.log(`[Webhook] 🟢 Signature Verified: ${transmissionId}`);
-        } catch (err) {
-            console.error(`[Webhook] ⛔ Verification Failed: ${err.message}`);
-            return NextResponse.json({ error: err.message }, { status: 400 });
-        }
-    } else {
-        console.log(`[Webhook] ⚠️ Skipping verification in Development`);
+    // Signature is always verified to ensure maximum security, even in development.
+    try {
+        await verifyPayPalWebhook(headersList, rawBody);
+        console.log(`[Webhook] 🟢 Signature Verified: ${transmissionId}`);
+    } catch (err) {
+        console.error(`[Webhook] ⛔ Verification Failed: ${err.message}`);
+        return NextResponse.json({ error: err.message }, { status: 400 });
     }
-
     // 2. PARSE EVENT
     let body;
     try {
@@ -44,7 +40,7 @@ export async function POST(request) {
 
     const eventType = body.event_type;
     const resource = body.resource;
-    
+
     console.log(`[Webhook] 📨 Processing Event: ${eventType}`);
 
     // 3. DATABASE ACTION
@@ -113,9 +109,9 @@ export async function POST(request) {
 
         // --- CASE C: Status Changes (Cancel/Suspend/Expire) ---
         else if (
-            ['BILLING.SUBSCRIPTION.CANCELLED', 
-             'BILLING.SUBSCRIPTION.SUSPENDED', 
-             'BILLING.SUBSCRIPTION.EXPIRED'].includes(eventType)
+            ['BILLING.SUBSCRIPTION.CANCELLED',
+                'BILLING.SUBSCRIPTION.SUSPENDED',
+                'BILLING.SUBSCRIPTION.EXPIRED'].includes(eventType)
         ) {
             const subscriptionId = resource.id;
             const newStatus = resource.status.toLowerCase();

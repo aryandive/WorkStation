@@ -270,9 +270,16 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
         const newProjectPayload = { name: newProjectName, user_id: user?.id };
 
         if (user) {
-            const { data, error } = await supabase.from('projects').insert(newProjectPayload).select().single();
-            if (error) { console.error('Error adding project:', error); return; }
-            if (data) { setProjects(p => [...p, data]); setActiveProjectId(data.id); }
+            const { data, error } = await supabase.from('projects').insert([newProjectPayload]).select();
+            if (error) {
+                console.error('Error adding project:', JSON.stringify(error, null, 2) || error.message);
+                alert(`Error adding project: ${error.message || 'Check console output'}`);
+                return;
+            }
+            if (data && data.length > 0) {
+                setProjects(p => [...p, data[0]]);
+                setActiveProjectId(data[0].id);
+            }
         } else {
             const localNewProject = { ...newProjectPayload, id: `local_${Date.now()}`, created_at: new Date().toISOString() };
             setProjects(p => [...p, localNewProject]); setActiveProjectId(localNewProject.id);
