@@ -21,25 +21,25 @@ const geistMono = Geist_Mono({
 // 2. SEO Metadata (Static)
 export const metadata = {
   title: {
-    template: '%s | WorkStation',
-    default: 'WorkStation - Immersive Productivity Platform',
+    template: '%s | SyncFlowState',
+    default: 'SyncFlowState - Immersive Productivity Platform',
   },
   description: 'Boost focus with our immersive productivity suite. Features Pomodoro timer, ambient soundscapes, task management, and reflective journaling.',
-  keywords: ['productivity', 'pomodoro', 'focus', 'journal', 'ambient sounds', 'workstation'],
-  authors: [{ name: 'WorkStation Team' }],
-  creator: 'WorkStation',
+  keywords: ['productivity', 'pomodoro', 'focus', 'journal', 'ambient sounds', '  '],
+  authors: [{ name: 'SyncFlowState' }],
+  creator: 'SyncFlowState',
   openGraph: {
-    title: 'WorkStation - Master Your Focus',
+    title: 'SyncFlowState - Master Your Focus',
     description: 'Immersive productivity tools for deep work.',
-    // url: 'https://workstationfocus.com', // Replace with your actual domain
-    url: 'https://workstationfocus.com',
-    siteName: 'WorkStation',
+    // url: 'https://SyncFlowStatefocus.com', // Replace with your actual domain
+    url: 'https://syncflowstate.com',
+    siteName: 'SyncFlowState',
     images: [
       {
         url: '/og-image.jpg', // Ensure you add this image to public/ folder
         width: 1200,
         height: 630,
-        alt: 'WorkStation Preview',
+        alt: 'SyncFlowState Preview',
       },
     ],
     locale: 'en_US',
@@ -47,7 +47,7 @@ export const metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'WorkStation - Master Your Focus',
+    title: 'SyncFlowState - Master Your Focus',
     description: 'Immersive productivity tools for deep work.',
     images: ['/og-image.jpg'], // Same image as OG
   },

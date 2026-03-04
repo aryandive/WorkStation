@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import Draggable from 'react-draggable';
 import usePomodoroTimer from '@/hooks/usePomodoroTimer';
 import { useSessionLogger } from '@/hooks/useSessionLogger';
+import { useGuestState } from '@/hooks/useGuestState';
 import SessionSettings from '@/components/pomodoro/SessionSettings';
 import ProgressCircle from '@/components/pomodoro/ProgressCircle';
 import TimerControls from '@/components/pomodoro/TimerControls';
@@ -59,7 +60,7 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         } catch {
             // ignore corrupted storage
         }
-         
+
     }, [isOpen]);
 
     // Persist linked task whenever it changes
@@ -120,46 +121,46 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isOpen, isRunning, isMinimized, isSettingsOpen, startTimer, pauseTimer, skipMode, resetTimer, playSound]);
 
-    // Data Fetching (UPDATED WITH SOFT DELETE FILTER)
+    // Import and utilize useGuestState for consistent try-before-you-buy logic
+    const {
+        data: tasksData,
+        user,
+        loading: authLoading,
+        fetchData: fetchGuestTasks
+    } = useGuestState('todos', 'ws_tasks');
+    const {
+        data: projectsData,
+        fetchData: fetchGuestProjects
+    } = useGuestState('projects', 'ws_projects');
+
     useEffect(() => {
-        if (isOpen) {
-            const fetchTasks = async () => {
-                const { data: { user } } = await supabase.auth.getUser();
-                if (user) {
-                    // 1. Fetch Active Project IDs (Filter out deleted)
-                    const { data: activeProjects } = await supabase
-                        .from('projects')
-                        .select('id')
-                        .is('deleted_at', null);
+        if (isOpen && !authLoading) {
+            const loadData = async () => {
+                // 1. Fetch Active Projects
+                const fetchedProjects = await fetchGuestProjects((query) => query.select('id').is('deleted_at', null));
+                const activeProjectIds = new Set(fetchedProjects?.map(p => p.id) || []);
 
-                    const activeProjectIds = new Set(activeProjects?.map(p => p.id) || []);
-
-                    // 2. Fetch Tasks (include project_id)
-                    const { data: tasksData } = await supabase
-                        .from('todos')
-                        .select('id, task, project_id')
-                        .eq('user_id', user.id)
+                // 2. Fetch Tasks (include project_id)
+                const fetchedTasks = await fetchGuestTasks((query) =>
+                    query.select('id, task, project_id')
                         .eq('is_complete', false)
-                        .is('parent_task_id', null);
+                        .is('parent_task_id', null)
+                );
 
-                    // 3. Filter tasks: Show if project is active OR if task has no project
-                    const validTasks = (tasksData || []).filter(t =>
-                        !t.project_id || activeProjectIds.has(t.project_id)
-                    );
+                // 3. Filter tasks: Show if project is active OR if task has no project
+                const validTasks = (fetchedTasks || []).filter(t =>
+                    !t.project_id || activeProjectIds.has(t.project_id)
+                );
 
-                    setTasks(validTasks);
-                } else {
-                    const local = JSON.parse(localStorage.getItem('ws_tasks')) || [];
-                    setTasks(local.filter(t => !t.is_complete && !t.parent_task_id));
-                }
+                setTasks(validTasks);
             };
-            fetchTasks();
+            loadData();
         }
-    }, [isOpen, supabase]);
+    }, [isOpen, authLoading, fetchGuestTasks, fetchGuestProjects]);
 
     if (!isOpen) return null;
 
-    if (!isStoreLoaded) {
+    if (!isStoreLoaded || authLoading) {
         return (
             <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in backdrop-blur-sm">
                 <Card className="w-full max-w-sm bg-gray-900/90 border-gray-700/50">
