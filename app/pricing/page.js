@@ -317,7 +317,7 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
                     >
                         {user ? (
                             <span className="flex items-center gap-2">
-                                Go to Workstation <ArrowRight className="w-4 h-4" />
+                                Go to SyncFlowState <ArrowRight className="w-4 h-4" />
                             </span>
                         ) : (
                             <Link href={tier.href}>{tier.cta}</Link>
@@ -365,7 +365,7 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
                                                 // CRITICAL: Passing user ID for Webhook/Backend
                                                 return actions.order.create({
                                                     purchase_units: [{
-                                                        description: "WorkStation Lifetime Access (Server Fund)",
+                                                        description: "SyncFlowState Lifetime Access (Server Fund)",
                                                         amount: { value: "19.99" },
                                                         custom_id: user?.id
                                                     }]
@@ -428,7 +428,7 @@ function DeveloperNoteSection() {
                         </p>
                         <p>
                             <span className="text-yellow-400 font-semibold">Why the limited Lifetime Deal?</span> It&apos;s not a gimmick—it&apos;s a necessity.
-                            I&apos;ve calculated the exact cost to keep WorkStation fast, secure, and ad-free, covering everything from <span className="text-white font-medium">VPS hosting and Apple Developer fees to database backups</span>.
+                            I&apos;ve calculated the exact cost to keep SyncFlowState fast, secure, and ad-free, covering everything from <span className="text-white font-medium">VPS hosting and Apple Developer fees to database backups</span>.
                         </p>
                         <p>
                             Instead of taking venture capital, I&apos;m crowdfunding these costs directly from you.

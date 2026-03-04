@@ -123,9 +123,9 @@ export default function ContactPage() {
 
                     {/* Simplified Direct Email Section */}
                     <div className="mt-8 text-center">
-                         <a href="mailto:support@workstation.com" className="inline-flex items-center gap-2 text-gray-400 hover:text-yellow-400 transition-colors bg-gray-800/50 px-6 py-3 rounded-full border border-gray-700 hover:border-yellow-400/30">
+                         <a href="mailto:support@syncflowstate.com" className="inline-flex items-center gap-2 text-gray-400 hover:text-yellow-400 transition-colors bg-gray-800/50 px-6 py-3 rounded-full border border-gray-700 hover:border-yellow-400/30">
                             <Mail className="w-5 h-5" />
-                            <span>Prefer to email directly? <strong>support@workstation.com</strong></span>
+                            <span>Prefer to email directly? <strong>support@syncflowstate.com</strong></span>
                         </a>
                     </div>
                 </div>
