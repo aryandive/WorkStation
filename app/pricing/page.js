@@ -141,7 +141,8 @@ export default function PricingPage() {
             }
 
             // 2. Success! Redirect to the journal
-            window.location.href = '/journal?upgraded=true&type=lifetime';
+            sessionStorage.setItem('recent_purchase', 'true');
+            router.push('/success');
 
         } catch (err) {
             console.error("Verification Error:", err);

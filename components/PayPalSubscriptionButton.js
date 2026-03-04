@@ -42,13 +42,8 @@ export default function PayPalSubscriptionButton({ planId, user }) {
                 }}
                 onApprove={(data, actions) => {
                     console.log('Subscription successful:', data);
-                    // alert('Subscription Active! ID: ' + data.subscriptionID);
-                    const monthlyPlan = process.env.NEXT_PUBLIC_PAYPAL_MONTHLY_PLAN_ID;
-                    if (planId === monthlyPlan) {
-                        window.location.href = '/subscription-complete/monthly';
-                    } else {
-                        window.location.href = '/subscription-complete/yearly';
-                    }
+                    sessionStorage.setItem('recent_purchase', 'true');
+                    window.location.href = '/success';
                 }}
             />
         </div>
