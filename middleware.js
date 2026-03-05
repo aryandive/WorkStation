@@ -26,6 +26,8 @@ export async function middleware(req) {
         '/',
         '/login',
         '/signup',
+        '/forgot-password',
+        '/update-password',
         '/pricing',
         '/contact',
         '/terms',
