@@ -629,12 +629,16 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-yellow-400 hover:text-yellow-400 hover:bg-gray-800 transition-all aspect-[16/9] w-full h-full">
-                                                        {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
-                                                        <span className="text-xs font-medium">Import Video</span>
-                                                        <span className="text-[10px] opacity-70">Max 5</span>
-                                                        <input type="file" accept="video/*" className="hidden" onChange={handleSceneUpload} disabled={isUploading} />
-                                                    </label>
+                                                    <div className="w-full h-full aspect-[16/9]">
+                                                        <PremiumGate featureKey="custom_assets" requiredTier={2}>
+                                                            <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-yellow-400 hover:text-yellow-400 hover:bg-gray-800 transition-all aspect-[16/9] w-full h-full">
+                                                                {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
+                                                                <span className="text-xs font-medium">Import Video</span>
+                                                                <span className="text-[10px] opacity-70">Max 5</span>
+                                                                <input type="file" accept="video/*" className="hidden" onChange={handleSceneUpload} disabled={isUploading} />
+                                                            </label>
+                                                        </PremiumGate>
+                                                    </div>
                                                 </TooltipTrigger>
                                                 <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs z-[100]">
                                                     <p>Local videos are stored in your browser.</p>
@@ -678,12 +682,16 @@ export default function EnvironmentPanel({ isOpen, setIsOpen }) {
                                         <TooltipProvider>
                                             <Tooltip>
                                                 <TooltipTrigger asChild>
-                                                    <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-blue-400 hover:text-blue-400 hover:bg-gray-800 transition-all aspect-[16/9] w-full h-full">
-                                                        {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
-                                                        <span className="text-xs font-medium">Import Image</span>
-                                                        <span className="text-[10px] opacity-70">Max 12</span>
-                                                        <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
-                                                    </label>
+                                                    <div className="w-full h-full aspect-[16/9]">
+                                                        <PremiumGate featureKey="custom_assets" requiredTier={2}>
+                                                            <label className="cursor-pointer border-2 border-dashed border-gray-700 rounded-lg flex flex-col items-center justify-center gap-2 text-gray-500 hover:border-blue-400 hover:text-blue-400 hover:bg-gray-800 transition-all aspect-[16/9] w-full h-full">
+                                                                {isUploading ? <Loader2 className="animate-spin" /> : <Plus size={24} />}
+                                                                <span className="text-xs font-medium">Import Image</span>
+                                                                <span className="text-[10px] opacity-70">Max 12</span>
+                                                                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} disabled={isUploading} />
+                                                            </label>
+                                                        </PremiumGate>
+                                                    </div>
                                                 </TooltipTrigger>
                                                 <TooltipContent className="bg-gray-900 border-gray-700 text-gray-300 text-xs z-[100]">
                                                     <p>Local images are stored in your browser.</p>
