@@ -94,7 +94,7 @@ const TIERS = [
 export default function PricingPage() {
     const [error, setError] = useState(null);
     const router = useRouter();
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
 
     // Scarcity Logic: Static start to feel real
     const [spotsLeft, setSpotsLeft] = useState(17);
@@ -201,6 +201,7 @@ export default function PricingPage() {
                                     key={tier.id}
                                     tier={tier}
                                     user={user}
+                                    authLoading={authLoading}
                                     router={router}
                                     onApproveSubscription={handleApproveSubscription}
                                     onApproveLifetime={handleApproveLifetime}
@@ -224,7 +225,7 @@ export default function PricingPage() {
 }
 
 // --- COMPONENT: Pricing Card ---
-function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifetime, spotsLeft }) {
+function PricingCard({ tier, user, authLoading, router, onApproveSubscription, onApproveLifetime, spotsLeft }) {
     const isHero = tier.variant === 'hero';
     const isFree = tier.planId === 'free';
     const isLifetime = tier.id === 'lifetime';
@@ -328,14 +329,16 @@ function PricingCard({ tier, user, router, onApproveSubscription, onApproveLifet
                         {!user ? (
                             <Button
                                 onClick={() => router.push(`/login?redirect=/pricing`)}
+                                disabled={authLoading}
                                 className={cn(
                                     "w-full h-12 text-base font-bold shadow-lg transition-all hover:translate-y-[-1px]",
                                     isHero
                                         ? "bg-yellow-400 hover:bg-yellow-300 text-gray-900"
-                                        : "bg-gray-700 hover:bg-gray-600 text-white"
+                                        : "bg-gray-700 hover:bg-gray-600 text-white",
+                                    authLoading && "opacity-50 cursor-not-allowed"
                                 )}
                             >
-                                {isHero ? "Login to Support" : "Login to Subscribe"}
+                                {authLoading ? "Loading..." : isHero ? "Login to Support" : "Login to Subscribe"}
                             </Button>
                         ) : (
                             <div className={cn("rounded-lg relative", isHero && "ring-2 ring-yellow-400/50 ring-offset-2 ring-offset-[#1A202C]")}>

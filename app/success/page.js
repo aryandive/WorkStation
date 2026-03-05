@@ -17,8 +17,9 @@ export default function SuccessPage() {
             router.push('/journal');
         } else {
             setIsAuthorized(true);
-            // Immediately remove to prevent refreshing back into this page
-            sessionStorage.removeItem('recent_purchase');
+            // We do NOT remove it immediately here. 
+            // In React Strict Mode, useEffect runs twice. Removing it on the first run 
+            // causes the second run to redirect the user away instantly.
         }
     }, [router]);
 
@@ -48,7 +49,10 @@ export default function SuccessPage() {
                 </p>
 
                 <Button
-                    onClick={() => router.push('/journal')}
+                    onClick={() => {
+                        sessionStorage.removeItem('recent_purchase');
+                        router.push('/journal');
+                    }}
                     className="w-full h-14 text-lg font-bold bg-gradient-to-r from-yellow-500 to-amber-500 text-black hover:scale-105 transition-transform shadow-[0_0_20px_rgba(234,179,8,0.3)] rounded-xl"
                 >
                     Enter SyncFlowState <ArrowRight className="ml-2 w-5 h-5" />
