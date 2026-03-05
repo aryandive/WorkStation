@@ -2,10 +2,12 @@ import { Resend } from 'resend';
 import { WelcomeEmail } from '@/emails/WelcomeEmail';
 import { NextResponse } from 'next/server';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req) {
   try {
+    // We moved the initialization inside the function!
+    // Now it only runs when the webhook is triggered.
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
     const { email } = await req.json();
 
     const data = await resend.emails.send({
