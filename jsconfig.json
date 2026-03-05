@@ -1,9 +1,16 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
+    "jsx": "preserve",
+    "moduleResolution": "node",
     "paths": {
-      "@/*": ["./*"]
+      "@/*": [
+        "./*"
+      ]
     }
-  }
+  },
+  "include": [
+    "**/*.js",
+    "**/*.jsx"
+  ]
 }
-
