@@ -8,7 +8,30 @@ import { Button } from '@/components/ui/button';
 import { Zap, Bell, Flame, Construction, Cloud, CloudOff, Loader2, RefreshCw, WifiOff } from 'lucide-react';
 import AuthButton from './AuthButton';
 import { useSubscription } from '@/context/SubscriptionContext';
-import { useAuth } from '@/context/AuthContext'; // Need isMigrating
+import { useAuth } from '@/context/AuthContext';
+
+// --- User Status Badge ---
+const UserStatusBadge = ({ user, isPro }) => {
+    if (isPro) {
+        return (
+            <span className="hidden sm:inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.4)] border border-yellow-300">
+                PRO
+            </span>
+        );
+    }
+    if (user) {
+        return (
+            <span className="hidden sm:inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                FREE
+            </span>
+        );
+    }
+    return (
+        <span className="hidden sm:inline-flex items-center justify-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-800 text-gray-400 border border-gray-700">
+            GUEST
+        </span>
+    );
+};
 
 // Reusable IconButton component
 const IconButton = ({ src, alt, tooltip, onClick, href }) => {
@@ -35,12 +58,12 @@ export default function TopRightNav() {
     const [isStreakOpen, setIsStreakOpen] = useState(false);
     const [isNotificationOpen, setIsNotificationOpen] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(false);
-    
+
     // --- Connectivity State ---
     const [isOnline, setIsOnline] = useState(true);
 
     const { isPro, loading: subLoading } = useSubscription();
-    const { isMigrating } = useAuth(); // Migration Spinner State
+    const { isMigrating, user } = useAuth(); // Migration Spinner State and User for Badge
 
     const toggleFullScreen = () => {
         if (!document.fullscreenElement) {
@@ -53,7 +76,7 @@ export default function TopRightNav() {
     useEffect(() => {
         const onFullScreenChange = () => setIsFullscreen(!!document.fullscreenElement);
         document.addEventListener('fullscreenchange', onFullScreenChange);
-        
+
         // Online/Offline Listeners
         if (typeof window !== 'undefined') setIsOnline(navigator.onLine);
         const setOnline = () => setIsOnline(true);
@@ -78,7 +101,7 @@ export default function TopRightNav() {
                 style: "bg-yellow-500/10 border-yellow-500/30 text-yellow-400"
             };
         }
-        
+
         // 2. Offline State (Paid User)
         if (isPro && !isOnline) {
             return {
@@ -137,7 +160,9 @@ export default function TopRightNav() {
                 <IconButton src="/feedback.svg" alt="Feedback" tooltip="Give Feedback" href="https://forms.gle/feedback" />
                 <IconButton src="/fullscreen.svg" alt="Toggle Fullscreen" tooltip={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'} onClick={toggleFullScreen} />
 
-                <div className="pl-2 border-l border-white/20">
+                {/* Status Badge & Auth */}
+                <div className="pl-3 border-l border-white/20 flex items-center gap-3">
+                    <UserStatusBadge user={user} isPro={isPro} />
                     <AuthButton />
                 </div>
             </div>

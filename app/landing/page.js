@@ -89,7 +89,7 @@ export default function LandingPage() {
                 <div className="relative z-10 container mx-auto px-6 text-center max-w-5xl">
                     <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 text-xs font-bold tracking-wide uppercase mb-8 shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:bg-yellow-500/20 transition-all cursor-default">
                         <Sparkles className="w-3.5 h-3.5" />
-                        <span>v2.0 Early Access • 421/500 Spots Claimed</span>
+                        <span>v2.0 Early Access • 2/25 Spots Claimed</span>
                     </div>
 
                     <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 text-white leading-tight">
