@@ -1,10 +1,8 @@
 import { createClient } from '@/utils/supabase/server';
 import { redirect } from 'next/navigation';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertCircle } from 'lucide-react';
+import UpdatePasswordForm from './UpdatePasswordForm';
 
 export default async function UpdatePassword({ searchParams }) {
     const sp = await searchParams;
@@ -19,11 +17,11 @@ export default async function UpdatePassword({ searchParams }) {
         }
 
         if (password.length < 6) {
-             return redirect('/update-password?message=Password must be at least 6 characters long');
+            return redirect('/update-password?message=Password must be at least 6 characters long');
         }
 
         const supabase = await createClient();
-        
+
         // Because the user clicked the link in their email, 
         // Supabase has already securely logged them in via the /auth/callback route.
         const { error } = await supabase.auth.updateUser({
@@ -52,7 +50,7 @@ export default async function UpdatePassword({ searchParams }) {
                         Please enter a strong new password for your account.
                     </CardDescription>
                 </CardHeader>
-                
+
                 <CardContent className="space-y-4 pt-4">
                     {/* Error Message Display */}
                     {sp?.message && (
@@ -62,33 +60,7 @@ export default async function UpdatePassword({ searchParams }) {
                         </div>
                     )}
 
-                    <form action={updatePassword} className="space-y-5">
-                        <div className="space-y-2">
-                            <Label htmlFor="password" className="text-gray-300 font-medium">New Password</Label>
-                            <Input
-                                type="password"
-                                name="password"
-                                id="password"
-                                placeholder="••••••••"
-                                required
-                                className="bg-[#0D1117] border-[#30363D] text-white placeholder:text-gray-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all h-10"
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <Label htmlFor="confirmPassword" className="text-gray-300 font-medium">Confirm Password</Label>
-                            <Input
-                                type="password"
-                                name="confirmPassword"
-                                id="confirmPassword"
-                                placeholder="••••••••"
-                                required
-                                className="bg-[#0D1117] border-[#30363D] text-white placeholder:text-gray-600 focus:border-yellow-500/50 focus:ring-yellow-500/20 transition-all h-10"
-                            />
-                        </div>
-                        <Button type="submit" className="w-full bg-yellow-500 text-black hover:bg-yellow-400 font-bold h-10 transition-all shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:shadow-[0_0_20px_rgba(234,179,8,0.3)] mt-2">
-                            Update Password
-                        </Button>
-                    </form>
+                    <UpdatePasswordForm updatePasswordAction={updatePassword} />
                 </CardContent>
             </Card>
         </div>
