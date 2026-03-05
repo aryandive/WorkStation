@@ -1,539 +1,450 @@
 'use client';
 import { useState, useEffect, useCallback, useRef } from 'react';
-import Image from 'next/image';
-import { useRouter } from 'next/navigation'; // Import useRouter
-import { saveLocalJournal, getLocalJournals, countLocalJournals } from '@/lib/localJournal';
-import { createClient } from '@/utils/supabase/client';
-import eventBus from '@/lib/eventBus';
-import {
-    ChevronLeft, ChevronRight, RefreshCw, Bold, Italic, List, Heading1, Heading2, Search, Calendar as CalendarIcon, Type as ParagraphIcon, Bot, Lock, Edit, Zap
-} from 'lucide-react';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/context/AuthContext'; // Import useAuth
-import { useSubscription } from '@/context/SubscriptionContext'; // Import useSubscription
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-// --- Reusable Sub-Components (assuming they are defined in the same file or imported) ---
-const Greeting = ({ greeting }) => (
-    <div className="flex items-center gap-4 animate-fade-in">
-        <h1 className="text-4xl lg:text-5xl font-bold z-20 bg-gradient-to-r from-yellow-300 to-yellow-500 bg-clip-text text-transparent">
-            {greeting}
-        </h1>
-    </div>
-);
+// --- Icons & UI ---
+import {
+    Search, Loader2, PanelTopClose, PanelTopOpen, AlertTriangle, Home, Crown
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { cn } from "@/lib/utils";
 
-const ActivityRing = ({ percentage, color, label, value }) => {
-    const [animatedPercentage, setAnimatedPercentage] = useState(0);
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setAnimatedPercentage(percentage);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [percentage]);
-    return (
-        <div className="relative w-16 h-16 lg:w-20 lg:h-20 group">
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center z-10">
-                <span className="font-bold text-base lg:text-lg transition-all duration-500 group-hover:scale-110">{value}</span>
-                <span className="text-xs -mt-1 opacity-80">{label}</span>
-            </div>
-            <svg className="w-full h-full -rotate-90" viewBox="0 0 36 36">
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="3"></circle>
-                <circle cx="18" cy="18" r="15.9155" fill="none" stroke={color} strokeWidth="3" strokeDasharray={`${animatedPercentage}, 100`} strokeLinecap="round" className="transition-all duration-1000 ease-out"></circle>
-            </svg>
-        </div>
-    );
-};
+// --- Logic & Data ---
+import { saveLocalJournal, getLocalJournals } from '@/lib/localJournal';
+import { createClient } from '@/utils/supabase/client';
+import eventBus from '@/lib/eventBus';
+import { useAuth } from '@/context/AuthContext';
+import { useSubscription } from '@/context/SubscriptionContext';
 
-// ... (Prompt, Calendar, and other sub-components remain the same) ...
-const highPerformancePrompts = ["You had a great focus day! What was your secret to success?", "You completed a lot of tasks today. What was your biggest win?", "Momentum was on your side. How can you carry this into tomorrow?"];
-const lowPerformancePrompts = ["It looks like today was a challenge. What were some of the blockers you faced?", "What was the biggest distraction for you today?", "What's one small thing you can change to make tomorrow more focused?"];
-const generalPrompts = ["What are you most grateful for right now?", "Describe one thing you learned today, big or small.", "What was the most interesting problem you worked on today?"];
+// --- Components ---
+import Greeting from '@/components/journal/Greeting';
+import ActivityRings from '@/components/journal/ActivityRings';
+import ReflectivePrompt from '@/components/journal/ReflectivePrompt';
+import JournalCalendar from '@/components/journal/JournalCalendar';
+import TextEditor from '@/components/journal/TextEditor';
+import SignUpModal from '@/components/auth/SignUpModal';
+import JournalEntriesModal from '@/components/journal/JournalEntriesModal';
+import SnapshotsModal from '@/components/journal/SnapshotsModal';
+import HabitStreak from '@/components/journal/HabitStreak';
+import { calculateStreaks } from '@/lib/streakUtils';
 
-const Prompt = ({ dailyStats }) => {
-    const [prompt, setPrompt] = useState("Let's reflect on your day.");
-    const [isRefreshing, setIsRefreshing] = useState(false);
-
-    const refreshPrompt = useCallback(() => {
-        setIsRefreshing(true);
-        let promptPool = generalPrompts;
-
-        if (dailyStats && dailyStats.sessions.value) {
-            const pomosCompleted = parseInt(dailyStats.sessions.value, 10);
-            if (pomosCompleted >= 4) promptPool = highPerformancePrompts;
-            else if (pomosCompleted <= 1 && new Date().getHours() > 18) promptPool = lowPerformancePrompts;
-        }
-
-        setPrompt(currentPrompt => {
-            let newPrompt = currentPrompt;
-            while (newPrompt === currentPrompt) {
-                newPrompt = promptPool[Math.floor(Math.random() * promptPool.length)];
-            }
-            return newPrompt;
-        });
-
-        setTimeout(() => setIsRefreshing(false), 500);
-    }, [dailyStats]);
-
-    useEffect(() => {
-        refreshPrompt();
-    }, [dailyStats, refreshPrompt]);
-
-    return (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 animate-fade-in-up">
-            <h2 className="font-bold mb-2 text-yellow-400 text-sm uppercase tracking-wider flex items-center"><Bot className="mr-2 w-4 h-4" /> Reflective Prompt</h2>
-            <div className="flex items-center gap-2 p-3 bg-black/30 rounded-lg transition-all duration-300 hover:bg-black/40">
-                <p className="text-sm text-gray-200 flex-grow transition-opacity duration-300">{prompt}</p>
-                <button onClick={refreshPrompt} className="p-2 rounded-full bg-gray-700 hover:bg-yellow-500 hover:text-gray-900 transition-all duration-300 flex-shrink-0" aria-label="Refresh prompt"><RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} /></button>
-            </div>
-        </div>
-    );
-};
-
-
-const Calendar = ({ onDateSelect, allEntries, selectedDate, searchFilter }) => {
-    const [displayDate, setDisplayDate] = useState(new Date(selectedDate));
-    const [transitionDirection, setTransitionDirection] = useState('right');
-
-    const entryDays = Object.keys(allEntries);
-
-    useEffect(() => {
-        setDisplayDate(new Date(selectedDate));
-    }, [selectedDate]);
-
-    const changeMonth = (direction) => {
-        setTransitionDirection(direction === 'left' ? 'right' : 'left');
-        setTimeout(() => {
-            setTransitionDirection(direction);
-            const newDate = new Date(displayDate);
-            newDate.setMonth(newDate.getMonth() + (direction === 'left' ? -1 : 1));
-            setDisplayDate(newDate);
-        }, 150)
-    };
-
-    const renderCalendar = () => {
-        const month = displayDate.getMonth();
-        const year = displayDate.getFullYear();
-        const firstDayOfMonth = new Date(year, month, 1).getDay();
-        const daysInMonth = new Date(year, month + 1, 0).getDate();
-        const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-        const days = Array.from({ length: firstDayOfMonth }, (_, i) => <div key={`empty-${i}`}></div>);
-
-        for (let i = 1; i <= daysInMonth; i++) {
-            const date = new Date(year, month, i);
-            const dateKey = `${year}-${month + 1}-${i}`;
-            const entryForDay = allEntries[dateKey];
-            const hasEntryWithContent = entryForDay && entryForDay.content && entryForDay.content.replace(/<[^>]*>/g, '').trim() !== '';
-
-            const isSelected = date.toDateString() === selectedDate.toDateString();
-            const isToday = date.toDateString() === new Date().toDateString();
-            const isFilteredOut = searchFilter && hasEntryWithContent && !searchFilter.includes(dateKey);
-
-            days.push(
-                <div key={i} onClick={() => onDateSelect(date)} className={`p-1 cursor-pointer rounded-full text-center relative transition-all duration-200 transform hover:scale-110 ${isSelected ? 'bg-yellow-500 text-gray-900 font-bold scale-110 shadow-lg' : isToday ? 'border-2 border-yellow-500' : 'hover:bg-gray-700'} ${isFilteredOut ? 'opacity-20 pointer-events-none' : ''}`}>
-                    {i}
-                    {hasEntryWithContent && !isSelected && (<span className="absolute bottom-0 left-1/2 -translate-x-1/2 h-1.5 w-1.5 rounded-full bg-yellow-500"></span>)}
-                </div>
-            );
-        }
-
-        return (
-            <div className={`animate-fade-in-${transitionDirection}`}>
-                <div className="flex justify-between items-center mb-4">
-                    <button onClick={() => changeMonth('left')} className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-all duration-300"><ChevronLeft size={20} /></button>
-                    <h3 className="font-bold text-lg flex items-center"><CalendarIcon className="mr-2 w-5 h-5 text-yellow-500" />{displayDate.toLocaleString('default', { month: 'long' })} {displayDate.getFullYear()}</h3>
-                    <button onClick={() => changeMonth('right')} className="p-2 rounded-full bg-gray-800 hover:bg-gray-700 transition-all duration-300"><ChevronRight size={20} /></button>
-                </div>
-                <div className="grid grid-cols-7 gap-2 text-sm">
-                    {dayHeaders.map((day, index) => (<div key={`${day}-${index}`} className="font-bold text-gray-400 text-center py-1">{day}</div>))}
-                    {days}
-                </div>
-            </div>
-        );
-    };
-
-    return (
-        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-5 rounded-2xl shadow-lg border border-gray-700 flex-grow">
-            {renderCalendar()}
-        </div>
-    );
-};
-
-const JournalEditor = ({ entry, onEntryChange, dailyStats, isPastDate, isEditMode, setIsEditMode, isSavingDisabled, entryCount }) => {
-    const editorRef = useRef(null);
-
-    const isLocked = (isPastDate && !isEditMode) || isSavingDisabled;
-
-    useEffect(() => {
-        if (editorRef.current && editorRef.current.innerHTML !== entry.content) {
-            editorRef.current.innerHTML = entry.content;
-        }
-    }, [entry.id, entry.content]);
-
-    const handleContentChange = (e) => {
-        if (isLocked) return;
-        onEntryChange({ ...entry, content: e.currentTarget.innerHTML });
-    };
-    const handleTitleChange = (e) => {
-        if (isLocked) return;
-        onEntryChange({ ...entry, title: e.target.value });
-    };
-    const formatDoc = (command, value = null) => {
-        if (isLocked) return;
-        document.execCommand(command, false, value);
-        editorRef.current.focus();
-    };
-    const formatButtonClass = "p-2 rounded-md bg-gray-800 hover:bg-gray-700 transition-all duration-300 hover:scale-110 disabled:opacity-50 disabled:pointer-events-none";
-
-    return (
-        <section className="flex-grow bg-gradient-to-b from-gray-900 to-gray-800 rounded-2xl p-5 md:p-7 flex flex-col overflow-hidden shadow-xl border border-gray-700 animate-fade-in-left">
-            <div className="flex items-center gap-4 mb-6 relative">
-                <input value={entry.title || ''} onChange={handleTitleChange} disabled={isLocked} className="bg-transparent text-2xl lg:text-3xl font-bold w-full focus:outline-none border-b-2 border-transparent focus:border-yellow-500 transition-all duration-300 pb-1 disabled:opacity-70" placeholder="Journal Entry Title" />
-                <div className="relative">
-                    <Image src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNTFmM2U3ZDAxMDRmOTczZGIyNDkyODYzOTczY2I1MjZkYmFjNGE2ZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/RgzryV9I1h5oYc1R26/giphy.gif" alt="Decorative animation" width={48} height={48} unoptimized={true} className="w-12 h-12 rounded-full flex-shrink-0 border-2 border-yellow-500 shadow-lg" />
-                </div>
-            </div>
-
-            {isSavingDisabled && (
-                <div className="mb-4 p-4 bg-yellow-900/30 border border-yellow-700 rounded-lg text-center">
-                    <p className="font-bold text-yellow-300">Journal Limit Reached</p>
-                    <p className="text-sm text-yellow-200/90 mt-1">You&apos;ve reached the 30-entry limit for the free plan.</p>
-                    <Button asChild size="sm" className="mt-3 bg-yellow-500 text-gray-900 hover:bg-yellow-400">
-                        <Link href="/pricing"><Zap size={14} className="mr-2" /> Upgrade to Pro for Unlimited Entries</Link>
-                    </Button>
-                </div>
-            )}
-
-            <div className="flex-shrink-0 flex items-center gap-4 md:gap-6 mb-6 p-4 bg-black/30 rounded-xl backdrop-blur-sm border border-gray-700/50">
-                <h3 className="font-bold text-gray-400 hidden sm:block">Today&apos;s Focus:</h3>
-                <div className="flex items-center gap-4 md:gap-6 w-full justify-around sm:justify-start">
-                    <ActivityRing percentage={dailyStats.focus.percentage} color="#38B2AC" value={dailyStats.focus.value} label="Focus Goal" />
-                    <ActivityRing percentage={dailyStats.tasks.percentage} color="#48BB78" value={dailyStats.tasks.value} label="Tasks Today" />
-                    <ActivityRing percentage={dailyStats.sessions.percentage} color="#FBBF24" value={dailyStats.sessions.value} label="Pomos Today" />
-                </div>
-            </div>
-            <div className="flex gap-2 mb-4 border-b border-gray-700 pb-3 items-center">
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('formatBlock', 'p')} aria-label="Paragraph"><ParagraphIcon size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('bold')} aria-label="Bold"><Bold size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('italic')} aria-label="Italic"><Italic size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('insertUnorderedList')} aria-label="Bulleted List"><List size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('formatBlock', 'h1')} aria-label="Heading 1"><Heading1 size={18} /></button>
-                <button className={formatButtonClass} disabled={isLocked} onClick={() => formatDoc('formatBlock', 'h2')} aria-label="Heading 2"><Heading2 size={18} /></button>
-                <div className="ml-auto flex items-center gap-2">
-                    {isPastDate && (entry.content && entry.content.replace(/<[^>]*>/g, '').trim() !== '') && !isEditMode && (
-                        <Button onClick={() => setIsEditMode(true)} className="bg-yellow-500 hover:bg-yellow-600 text-gray-900" disabled={isSavingDisabled}><Edit size={16} className="mr-2" /> Edit Entry</Button>
-                    )}
-                    {isPastDate && isEditMode && (
-                        <Button onClick={() => setIsEditMode(false)} variant="outline" className="text-yellow-400 border-yellow-500 hover:bg-yellow-500/10"><Lock size={16} className="mr-2" /> Save & Lock</Button>
-                    )}
-                </div>
-            </div>
-            <div ref={editorRef} contentEditable={!isLocked} onInput={handleContentChange} className={`prose prose-invert max-w-none flex-grow overflow-y-auto custom-scrollbar p-4 leading-relaxed bg-gray-900/50 rounded-xl border border-gray-700/30 focus:outline-none transition-all duration-300 ${isLocked ? 'focus:ring-0 opacity-70 cursor-not-allowed' : 'focus:ring-2 focus:ring-yellow-500'}`} placeholder="Start writing here..."></div>
-        </section>
-    );
-};
-
-// --- Main Journal Page ---
 export default function JournalPage() {
+    // --- Auth & Data State ---
     const { user, loading: authLoading } = useAuth();
     const { isPro, loading: subLoading } = useSubscription();
     const router = useRouter();
     const supabase = createClient();
 
+    // --- UI State ---
+    const [greeting, setGreeting] = useState('');
+    const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [displayName, setDisplayName] = useState('');
+    const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
+    const [modalMode, setModalMode] = useState('signup');
+    const [isEntriesListOpen, setIsEntriesListOpen] = useState(false);
+    const [isDataRiskModalOpen, setIsDataRiskModalOpen] = useState(false);
+    const [isSnapshotOpen, setIsSnapshotOpen] = useState(false);
+
+    // --- Journal State ---
     const [selectedDate, setSelectedDate] = useState(new Date());
     const [entry, setEntry] = useState({ id: null, date: null, title: '', content: '' });
     const [allEntries, setAllEntries] = useState({});
-    const [greeting, setGreeting] = useState('');
-    const [dailyStats, setDailyStats] = useState({ focus: { percentage: 0, value: '0/120m' }, tasks: { percentage: 0, value: '0/0' }, sessions: { percentage: 0, value: '0/0' }, });
-    const [searchQuery, setSearchQuery] = useState('');
-    const [filteredEntryDays, setFilteredEntryDays] = useState(null);
+    const [saveStatus, setSaveStatus] = useState('idle');
+    const [isContentLoading, setIsContentLoading] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
 
+    // --- Search State ---
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filteredEntryDays, setFilteredEntryDays] = useState(null);
+    const [streaks, setStreaks] = useState({ current: 0, best: 0 });
+
+    // --- Stats State ---
+    const [dailyStats, setDailyStats] = useState({
+        entries: { percentage: 0, value: '0/0', limit: 30 },
+        tasks: { percentage: 0, value: '0/0' },
+        sessions: { percentage: 0, value: '0/0' },
+        user: null,
+        isPro: false
+    });
+
+    // Refs
+    const editorRef = useRef(null);
+    const entryRef = useRef(entry);
+    entryRef.current = entry;
+
+    // --- Helpers ---
     const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
     const journalEntryCount = Object.keys(allEntries).length;
     const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
-
-    // **NEW**: Combined loading state
     const isLoading = authLoading || subLoading;
+    const reducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
-    // --- Data Fetching and Side Effects ---
+    const changeDate = (days) => {
+        editorRef.current?.flushSave?.();
+        const newDate = new Date(selectedDate);
+        newDate.setDate(newDate.getDate() + days);
+        setSelectedDate(newDate);
+    };
 
-    useEffect(() => {
-        // Redirect anonymous users
-        if (!isLoading && !user) {
-            router.push('/landing');
-        }
-    }, [user, isLoading, router]);
+    const safeSetSelectedDate = (date) => {
+        editorRef.current?.flushSave?.();
+        setSelectedDate(date);
+    };
 
+    // --- Data Fetching ---
     const fetchJournalEntries = useCallback(async () => {
-        if (isLoading || !user) return; // Wait for loading to finish and user to be present
-
-        if (isPro) { // Premium User
-            const { data, error } = await supabase
-                .from('journal_entries')
-                .select('*')
-                .eq('user_id', user.id);
-
-            if (error) {
-                console.error("Error fetching journal entries:", error);
-                setAllEntries({});
-            } else {
+        if (isLoading) return;
+        if (user) {
+            const { data, error } = await supabase.from('journal_entries').select('id, date, title, user_id').eq('user_id', user.id);
+            if (error) { console.error("Error fetching journal entries:", error); setAllEntries({}); }
+            else {
                 const entriesMap = data.reduce((acc, entry) => {
-                    const date = new Date(entry.date + 'T12:00:00Z');
-                    const key = getDateKey(date);
-                    acc[key] = entry;
+                    const dateStr = entry.date.includes('T') ? entry.date.split('T')[0] : entry.date;
+                    const [y, m, d] = dateStr.split('-').map(Number);
+                    acc[`${y}-${m}-${d}`] = entry;
                     return acc;
                 }, {});
                 setAllEntries(entriesMap);
+                setStreaks(calculateStreaks(data));
             }
-        } else { // Free Tier User
-            setAllEntries(getLocalJournals());
+        } else {
+            const localData = getLocalJournals();
+            setAllEntries(localData);
+            setStreaks(calculateStreaks(Object.values(localData)));
         }
     }, [user, isPro, isLoading, supabase]);
 
+    const fetchEntryContent = useCallback(async (dateKey) => {
+        if (!user) return null;
+        const [y, m, d] = dateKey.split('-').map(Number);
+        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        const { data, error } = await supabase.from('journal_entries').select('content').eq('user_id', user.id).eq('date', isoDate).single();
+        if (error) return null;
+        return data.content;
+    }, [user, isPro, supabase]);
 
     const fetchDailyStats = useCallback(async () => {
-        const { data: { user } } = await supabase.auth.getUser();
         const today = new Date();
         const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate()).toISOString();
         let activeTasks = [];
-        let allTasks = [];
+
         if (user) {
-            const { data: activeData, error: activeError } = await supabase.from('todos').select('is_complete, pomodoros_spent, pomodoros_estimated').eq('user_id', user.id).gte('updated_at', todayStart);
-            if (activeError) { console.error("Error fetching active daily stats:", activeError); return; }
-            activeTasks = activeData || [];
-            const { data: allData, error: allError } = await supabase.from('todos').select('id, is_complete').eq('user_id', user.id);
-            if (allError) { console.error("Error fetching all tasks:", allError); return; }
-            allTasks = allData || [];
+            const { data } = await supabase.from('todos').select('is_complete, pomodoros_spent, pomodoros_estimated').eq('user_id', user.id).gte('updated_at', todayStart);
+            activeTasks = data || [];
         } else {
             const localTasks = JSON.parse(localStorage.getItem('ws_tasks')) || [];
-            allTasks = localTasks;
-            activeTasks = localTasks.filter(t => {
-                const updatedDate = new Date(t.updated_at || t.created_at);
-                return updatedDate >= new Date(todayStart);
-            });
+            activeTasks = localTasks.filter(t => new Date(t.updated_at || t.created_at) >= new Date(todayStart));
         }
-        const focusTime = Math.round(activeTasks.reduce((acc, t) => acc + (t.pomodoros_spent || 0), 0) * 25);
-        const focusGoal = 120;
-        const tasksCompletedToday = activeTasks.filter(t => t.is_complete).length;
-        const tasksWorkedOnToday = activeTasks.length;
-        const pomodorosCompleted = activeTasks.reduce((acc, t) => acc + (t.pomodoros_spent || 0), 0);
-        const pomodorosEstimated = activeTasks.reduce((acc, t) => acc + (t.pomodoros_estimated || 1), 0);
-        setDailyStats({
-            focus: { percentage: focusGoal > 0 ? Math.min(100, (focusTime / focusGoal) * 100) : 0, value: `${focusTime}/${focusGoal}m` },
-            tasks: { percentage: tasksWorkedOnToday > 0 ? (tasksCompletedToday / tasksWorkedOnToday) * 100 : 0, value: `${tasksCompletedToday}/${tasksWorkedOnToday}` },
-            sessions: { percentage: pomodorosEstimated > 0 ? (pomodorosCompleted / pomodorosEstimated) * 100 : 0, value: `${pomodorosCompleted}/${pomodorosEstimated}` },
-        });
-    }, []);
+
+        const tasksCompleted = activeTasks.filter(t => t.is_complete).length;
+        const tasksTotal = activeTasks.length;
+        const pomosCompleted = activeTasks.reduce((acc, t) => acc + (t.pomodoros_spent || 0), 0);
+        const pomosTotal = activeTasks.reduce((acc, t) => acc + (t.pomodoros_estimated || 1), 0);
+
+        setDailyStats(prev => ({
+            ...prev,
+            tasks: { percentage: tasksTotal > 0 ? (tasksCompleted / tasksTotal) * 100 : 0, value: `${tasksCompleted}/${tasksTotal}` },
+            sessions: { percentage: pomosTotal > 0 ? (pomosCompleted / pomosTotal) * 100 : 0, value: `${pomosCompleted}/${pomosTotal}` },
+            user: user,
+            isPro: isPro
+        }));
+    }, [supabase, user, isPro]);
+
+    // --- Effects ---
+    useEffect(() => {
+        if (user) {
+            const fetchProfileName = async () => {
+                const { data } = await supabase.from('profiles').select('display_name').eq('id', user.id).single();
+                if (data?.display_name) { setDisplayName(data.display_name); }
+            };
+            fetchProfileName();
+        }
+    }, [user, supabase]);
 
     useEffect(() => {
-        const initialize = () => {
-            const hour = new Date().getHours();
-            setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
-            fetchDailyStats();
-
-            const handleTasksUpdated = () => fetchDailyStats();
-            eventBus.on('tasksUpdated', handleTasksUpdated);
-
-            return () => eventBus.remove('tasksUpdated', handleTasksUpdated);
-        };
-        initialize();
+        const hour = new Date().getHours();
+        setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
+        fetchDailyStats();
+        eventBus.on('tasksUpdated', fetchDailyStats);
+        return () => eventBus.remove('tasksUpdated', fetchDailyStats);
     }, [fetchDailyStats]);
 
     useEffect(() => {
-        fetchJournalEntries();
-    }, [fetchJournalEntries]); // Re-fetch when user/pro status changes
+        const count = Object.keys(allEntries).length;
+        const limit = isPro ? 365 : 100; // Visual goal for the ring
+        const percentage = Math.min(100, (count / limit) * 100);
+        setDailyStats(prev => ({ ...prev, entries: { percentage, value: `${count}`, limit } }));
+    }, [allEntries, isPro]);
 
+    useEffect(() => { fetchJournalEntries(); }, [fetchJournalEntries]);
+
+    // Migration Hook: Anonymous (Tier 0) -> Free (Tier 1)
+    useEffect(() => {
+        if (user && !isLoading) {
+            const localJournals = getLocalJournals();
+            if (Object.keys(localJournals).length > 0) {
+                const migrate = async () => {
+                    const payload = Object.entries(localJournals).map(([dateKey, data]) => {
+                        const [y, m, d] = dateKey.split('-').map(Number);
+                        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        return { user_id: user.id, date: isoDate, title: data.title, content: data.content };
+                    });
+                    const { error } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' });
+                    if (!error) {
+                        localStorage.removeItem('ws_journal_entries');
+                        fetchJournalEntries();
+                    }
+                };
+                migrate();
+            }
+        }
+    }, [user, isLoading, supabase, fetchJournalEntries]);
+
+    // Risk Popup Logic (Tier 0 Only)
+    useEffect(() => {
+        if (!user && !isLoading) {
+            const lastWarned = localStorage.getItem('journal_data_risk_popup_last_shown');
+            const now = Date.now();
+            const oneDay = 24 * 60 * 60 * 1000;
+            if (!lastWarned || (now - parseInt(lastWarned)) > oneDay) {
+                if (Object.keys(getLocalJournals()).length > 0) {
+                    setIsDataRiskModalOpen(true);
+                    localStorage.setItem('journal_data_risk_popup_last_shown', now.toString());
+                }
+            }
+        }
+    }, [user, isLoading]);
+
+    // Load Content Logic
     useEffect(() => {
         const dateKey = getDateKey(selectedDate);
-        const savedEntry = allEntries[dateKey] || {};
-        const title = savedEntry.title || selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-        setEntry({
-            id: savedEntry.id || null,
-            date: dateKey,
-            title,
-            content: savedEntry.content || ''
-        });
-        const today = new Date(); today.setHours(0, 0, 0, 0);
-        const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
-        setIsEditMode(checkDate >= today);
-    }, [selectedDate, allEntries]);
+        const cachedEntry = allEntries[dateKey];
+        const defaultTitle = selectedDate.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 
-    // --- Search Filtering ---
+        const updateEntryState = (entryData) => {
+            setEntry({
+                id: entryData?.id || null,
+                date: dateKey,
+                title: entryData?.title || defaultTitle,
+                content: entryData?.content || ''
+            });
+        };
+
+        const loadContent = async () => {
+            if (cachedEntry && typeof cachedEntry.content !== 'undefined') {
+                updateEntryState(cachedEntry);
+                return;
+            }
+            if (cachedEntry && user) {
+                const currentEntry = entryRef.current;
+                const isSameDate = currentEntry.date === dateKey;
+                const hasContentAlready = currentEntry.content && currentEntry.content.replace(/<[^>]*>/g, '').trim() !== '';
+
+                if (isSameDate && hasContentAlready) {
+                    updateEntryState(currentEntry);
+                    return;
+                }
+                setIsContentLoading(true);
+                if (!isSameDate) updateEntryState({ ...cachedEntry, content: '' });
+
+                const content = await fetchEntryContent(dateKey);
+                setIsContentLoading(false);
+
+                if (!content || content.trim() === '') {
+                    setAllEntries(prev => {
+                        const copy = { ...prev };
+                        delete copy[dateKey];
+                        return copy;
+                    });
+                    updateEntryState(null);
+                } else {
+                    const fullEntry = { ...cachedEntry, content: content };
+                    setAllEntries(prev => ({ ...prev, [dateKey]: fullEntry }));
+                    updateEntryState(fullEntry);
+                }
+                return;
+            }
+            updateEntryState(null);
+        };
+        loadContent();
+    }, [selectedDate, allEntries, fetchEntryContent, user]);
+
     useEffect(() => {
-        if (searchQuery.trim() === '') {
-            setFilteredEntryDays(null);
-            return;
-        }
-        const filteredDays = Object.entries(allEntries)
-            .filter(([, entryData]) => entryData.title?.toLowerCase().includes(searchQuery.toLowerCase()))
-            .map(([dateKey]) => dateKey);
-        setFilteredEntryDays(filteredDays);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        const check = new Date(selectedDate); check.setHours(0, 0, 0, 0);
+        setIsEditMode(check.getTime() === today.getTime());
+    }, [selectedDate]);
+
+    useEffect(() => {
+        if (!searchQuery.trim()) { setFilteredEntryDays(null); return; }
+        const filtered = Object.entries(allEntries)
+            .filter(([, v]) => v.title?.toLowerCase().includes(searchQuery.toLowerCase()))
+            .map(([k]) => k);
+        setFilteredEntryDays(filtered);
     }, [searchQuery, allEntries]);
 
-    // --- Entry Saving Logic ---
-    const timeoutRef = useRef(null);
-    const handleEntryChange = useCallback((newEntry) => {
-        setEntry(newEntry);
-
-        // Prevent saving for free tier if limit is reached and it's a new entry
+    // Saving Logic
+    const handleEntryChange = useCallback(async (newEntry) => {
+        setSaveStatus('saving');
         const dateKey = getDateKey(selectedDate);
-        const isNewEntry = !allEntries[dateKey];
-        if (isFreeTierLimitReached && isNewEntry) {
+        const strippedContent = newEntry.content ? newEntry.content.replace(/<[^>]*>/g, '').trim() : '';
+        const isEmpty = strippedContent.length === 0;
+
+        if (isFreeTierLimitReached && !allEntries[dateKey] && !isEmpty) {
+            setSaveStatus('error');
             return;
         }
 
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(async () => {
-            if (user && isPro) {
-                // Save to Supabase for Pro users
-                const { data, error } = await supabase
-                    .from('journal_entries')
-                    .upsert({
-                        id: newEntry.id,
-                        user_id: user.id,
-                        date: new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate()).toISOString().split('T')[0],
-                        title: newEntry.title,
-                        content: newEntry.content,
-                    }, { onConflict: 'id' }) // Use 'id' for conflict to ensure upsert works correctly
-                    .select()
-                    .single();
+        if (user) {
+            if (isEmpty && newEntry.id) {
+                await supabase.from('journal_entries').delete().eq('id', newEntry.id);
+                setAllEntries(prev => { const copy = { ...prev }; delete copy[dateKey]; return copy; });
+                setEntry(prev => ({ ...prev, id: null }));
+            } else if (!isEmpty) {
+                const y = selectedDate.getFullYear();
+                const m = selectedDate.getMonth() + 1;
+                const d = selectedDate.getDate();
+                const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                const payload = { user_id: user.id, date: isoDate, title: newEntry.title, content: newEntry.content };
+                if (newEntry.id) payload.id = newEntry.id;
 
-                if (error) {
-                    console.error("Error saving to Supabase:", error);
-                } else if (data) {
+                const { data } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' }).select().single();
+                if (data) {
                     setAllEntries(prev => ({ ...prev, [dateKey]: data }));
                     if (!newEntry.id) setEntry(prev => ({ ...prev, id: data.id }));
                 }
-            } else if (user) {
-                // Save to local storage for Free users
+            }
+        } else {
+            if (isEmpty) {
+                const allJournals = getLocalJournals();
+                delete allJournals[dateKey];
+                localStorage.setItem('ws_journal_entries', JSON.stringify(allJournals));
+                setAllEntries(allJournals);
+            } else {
                 saveLocalJournal(dateKey, { title: newEntry.title, content: newEntry.content });
                 setAllEntries(getLocalJournals());
             }
-        }, 1000);
+        }
+        setSaveStatus('saved');
+        setTimeout(() => setSaveStatus('idle'), 2000);
     }, [selectedDate, user, isPro, isFreeTierLimitReached, allEntries, supabase]);
 
+    const handleEditorClick = () => {
+        if (!user) { setModalMode('signup'); setIsSignUpModalOpen(true); }
+    };
+
+    if (isLoading) return <div className="min-h-screen bg-gray-950 flex items-center justify-center text-white"><Loader2 className="animate-spin mr-2" /> Loading...</div>;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const checkDate = new Date(selectedDate); checkDate.setHours(0, 0, 0, 0);
     const isPastDate = checkDate < today;
+    const isFutureDate = checkDate > today;
+    const editorWrapperProps = !isPro ? { onClickCapture: handleEditorClick } : {};
 
-    // Loading state for initial auth/sub check
-    if (isLoading) {
-        return <div className="min-h-screen w-full bg-gray-950 flex items-center justify-center text-white">Loading your journal...</div>;
-    }
-
-    // Render the journal page
     return (
-        <div className="min-h-screen w-full bg-gradient-to-br from-gray-900 to-gray-950 text-gray-100 font-sans">
-            <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} />
+        <div className="min-h-screen w-full bg-gray-950 text-gray-100 font-sans flex flex-col">
+            <SignUpModal isOpen={isSignUpModalOpen} setIsOpen={setIsSignUpModalOpen} mode={modalMode} />
+            <JournalEntriesModal isOpen={isEntriesListOpen} setIsOpen={setIsEntriesListOpen} allEntries={allEntries} onSelectEntry={safeSetSelectedDate} />
+            <SnapshotsModal isOpen={isSnapshotOpen} setIsOpen={setIsSnapshotOpen} date={selectedDate} />
+
+            <Dialog open={isDataRiskModalOpen} onOpenChange={setIsDataRiskModalOpen}>
+                <DialogContent className="bg-gray-900 border-yellow-600 text-white max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-yellow-500"><AlertTriangle className="w-5 h-5" /> Data Warning</DialogTitle>
+                        <DialogDescription className="text-gray-300">
+                            You are on the <strong>Free Plan</strong>. Your journal entries are stored <strong>locally on this device</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="bg-yellow-900/20 p-4 rounded-lg border border-yellow-700/50 text-sm text-yellow-200">
+                        <p>If you clear your browser history or cookies, <strong>you will lose your data forever.</strong></p>
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button variant="ghost" onClick={() => setIsDataRiskModalOpen(false)}>I Understand</Button>
+                        <Button className="bg-yellow-500 text-black hover:bg-yellow-400 font-bold" asChild>
+                            <Link href="/landing">Secure My Data (Upgrade)</Link>
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
             <style jsx global>{`
-                                /* ... animations ... *
-
                 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-
                 @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
                 @keyframes fadeInLeft { from { opacity: 0; transform: translateX(-20px); } to { opacity: 1; transform: translateX(0); } }
-
-                @keyframes fadeInRight { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-
                 .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
-
                 .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
-
                 .animate-fade-in-left { animation: fadeInLeft 0.6s ease-out forwards; }
-
-                .animate-fade-in-right { animation: fadeInRight 0.6s ease-out forwards; }
-
+                ${reducedMotion ? `* { animation-duration: 0.01ms !important; }` : ''}
                 [contenteditable]:focus { outline: none; }
-
-                .custom-scrollbar::-webkit-scrollbar { width: 8px; }
-
-                .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); border-radius: 10px; }
-
+                .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+                .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
                 .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
-
-                .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
-
-                .reduce-motion * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
-
-                /* --- STYLING FIXES --- */
-
-                .prose p {
-
-                font-size: 1rem;
-
-                line-height: 1.7; /* Increased for readability */
-
-                margin-top: 0.25em;
-
-                margin-bottom: 0.25em;
-
-                }
-
-                .prose p { font-size: 1rem; line-height: 1.7; margin-top: 0.25em; margin-bottom: 0.25em; }
-
-                .prose h1 { font-size: 1.875rem; margin-bottom: 0.75rem; margin-top: 1.5rem; }
-
-                .prose h2 { font-size: 1.5rem; margin-bottom: 0.75rem; margin-top: 1.25rem; }
-
-                .prose ul, .prose ol { padding-left: 1.75rem; margin-top: 0.5em; margin-bottom: 0.5em; }
+                .prose p { margin-top: 0.5em; margin-bottom: 0.5em; }
+                .prose h1, .prose h2 { margin-top: 1em; margin-bottom: 0.5em; }
            `}</style>
-            <div className={`flex flex-col py-4 px-4 sm:px-8 md:px-12 lg:px-16 gap-5 ${reducedMotion ? 'reduce-motion' : ''}`}>
-                <header className="flex-shrink-0 h-48 lg:h-56 relative flex justify-center items-center rounded-2xl overflow-hidden shadow-xl">
-                    <div className="absolute inset-0 bg-gradient-to-r from-purple-900/70 via-blue-900/50 to-indigo-900/70 z-0"></div>
-                    <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-gray-900/80 to-gray-950 z-10"></div>
-                    <Greeting greeting={`${greeting}, ${user?.email?.split('@')[0] || 'Explorer'}`} />
+
+            <div className="flex flex-col flex-grow py-4 px-3 sm:px-6 md:px-8 lg:px-12 gap-5 max-w-[1920px] mx-auto w-full">
+
+                <header className="flex-shrink-0 h-48 lg:h-56 relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
+                    <div className="absolute inset-0 w-full h-full z-0">
+                        <video src="/video123.webm" autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" aria-hidden />
+                    </div>
+                    <div className="absolute inset-0 bg-gradient-to-t from-gray-950/90 via-gray-900/40 to-transparent z-10"></div>
+                    <div className="absolute inset-0 bg-black/20 z-10"></div>
+
+                    <div className="absolute top-4 right-4 z-20">
+                        <Button asChild variant="secondary" size="sm" className="bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-lg">
+                            <Link href="/" className="flex items-center gap-2">
+                                <Home className="w-4 h-4" /> Home
+                            </Link>
+                        </Button>
+                    </div>
+                    <Greeting greeting={greeting} username={displayName || user?.email?.split('@')[0] || 'Explorer'} />
                 </header>
-                <main className="flex-grow flex flex-col lg:flex-row gap-5">
-                    <aside className="w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5">
+
+                <div className="lg:hidden flex justify-end">
+                    <Button variant="outline" size="sm" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="bg-gray-800 border-gray-700 text-yellow-400 hover:text-yellow-300">
+                        {isSidebarOpen ? <><PanelTopClose className="mr-2 h-4 w-4" /> Hide Tools</> : <><PanelTopOpen className="mr-2 h-4 w-4" /> Show Tools</>}
+                    </Button>
+                </div>
+
+                <main className="flex-grow flex flex-col lg:flex-row gap-5 h-full">
+                    <aside className={cn("w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 lg:sticky lg:top-6 lg:self-start lg:h-fit overflow-hidden", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
                         <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
-                            <button onClick={() => setSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all duration-300 shadow-md hover:shadow-lg">
-                                Go to Today
-                            </button>
+                            <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">Today</button>
                             <div className="relative w-full">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                                <input
-                                    type="search"
-                                    placeholder="Search entries..."
-                                    value={searchQuery}
-                                    onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-10 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300"
-                                />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                                <input type="search" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all" />
                             </div>
                         </div>
-                        <Calendar onDateSelect={setSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
-                        <Prompt dailyStats={dailyStats} />
 
-                        {!isPro && user && (
-                            <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700">
-                                <div className="flex items-center justify-between">
-                                    <Label className="flex flex-col space-y-1">
-                                        <span className="font-medium text-white">Journal Entries</span>
-                                        <span className="font-normal text-sm text-gray-400">{journalEntryCount} / 30 used</span>
-                                    </Label>
-                                    <Button asChild size="sm" className="bg-yellow-500 text-gray-900 hover:bg-yellow-400">
-                                        <Link href="/pricing">Upgrade</Link>
-                                    </Button>
-                                </div>
-                                <div className="w-full bg-gray-700 rounded-full h-2.5 mt-2">
-                                    <div className="bg-yellow-500 h-2.5 rounded-full" style={{ width: `${(journalEntryCount / 30) * 100}%` }}></div>
-                                </div>
-                            </div>
-                        )}
+                        <JournalCalendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
+                        <HabitStreak current={streaks.current} best={streaks.best} />
+                        <ReflectivePrompt dailyStats={dailyStats} />
                     </aside>
 
-                    <JournalEditor
-                        entry={entry}
-                        onEntryChange={handleEntryChange}
-                        dailyStats={dailyStats}
-                        isPastDate={isPastDate}
-                        isEditMode={isEditMode}
-                        setIsEditMode={setIsEditMode}
-                        isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
-                        entryCount={journalEntryCount}
-                    />
+                    <div {...editorWrapperProps} className="flex-grow min-h-[500px] lg:h-auto">
+                        <TextEditor
+                            ref={editorRef}
+                            entry={entry}
+                            onEntryChange={handleEntryChange}
+                            dailyStats={dailyStats}
+                            isPro={isPro}
+                            user={user}
+                            isPastDate={isPastDate}
+                            isFutureDate={isFutureDate}
+                            isEditMode={isEditMode}
+                            setIsEditMode={setIsEditMode}
+                            isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
+                            saveStatus={saveStatus}
+                            onNavigate={changeDate}
+                            isContentLoading={isContentLoading}
+                            onEntriesClick={() => setIsEntriesListOpen(true)}
+                            onSnapshotClick={() => setIsSnapshotOpen(true)}
+                        />
+                    </div>
                 </main>
             </div>
         </div>

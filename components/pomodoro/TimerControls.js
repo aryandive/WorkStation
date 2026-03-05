@@ -1,12 +1,11 @@
-import { Play, Pause, RefreshCw, SkipForward, Maximize2 } from 'lucide-react';
+import { Play, Pause, RefreshCw, SkipForward, Maximize2, GripHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useCallback, useRef, useEffect } from 'react'; // <-- Correctly import useEffect
+import { useCallback, useRef, useEffect } from 'react';
 
-// --- Sound Player Hook ---
+// --- Improved Sound Player Hook ---
 const useSoundPlayer = () => {
     const audioRef = useRef(null);
 
-    // Initialize the audio element on the client-side
     useEffect(() => {
         if (typeof window !== 'undefined') {
             audioRef.current = new Audio();
@@ -15,51 +14,67 @@ const useSoundPlayer = () => {
 
     const playSound = useCallback((soundFile) => {
         if (audioRef.current) {
-            audioRef.current.src = soundFile;
-            audioRef.current.play().catch(err => console.error("Sound play failed:", err));
+            const tempAudio = audioRef.current.cloneNode();
+            tempAudio.src = soundFile;
+            tempAudio.volume = 0.5;
+            tempAudio.play().catch(err => console.warn("Sound play failed:", err));
         }
     }, []);
 
     return playSound;
 };
 
-
-export default function TimerControls({ isRunning, startTimer, pauseTimer, resetTimer, skipMode, isMinimized = false, maximize }) {
+export default function TimerControls({ 
+    isRunning, 
+    startTimer, 
+    pauseTimer, 
+    resetTimer, 
+    skipMode, 
+    isMinimized = false, 
+    maximize,
+    onRecenter // <--- NEW PROP
+}) {
     const playClickSound = useSoundPlayer();
 
-    const handleStart = () => {
-        playClickSound('/sounds/click-start.mp3');
-        startTimer();
-    };
-
-    const handlePause = () => {
-        playClickSound('/sounds/click-pause.mp3');
-        pauseTimer();
-    };
-
-    const handleReset = () => {
-        playClickSound('/sounds/click-reset.mp3');
-        resetTimer();
-    };
-
-    const handleSkip = () => {
-        playClickSound('/sounds/click-skip.mp3');
-        skipMode();
-    };
+    const handleStart = () => { playClickSound('/sounds/click-start.mp3'); startTimer(); };
+    const handlePause = () => { playClickSound('/sounds/click-pause.mp3'); pauseTimer(); };
+    const handleReset = () => { playClickSound('/sounds/click-reset.mp3'); resetTimer(); };
+    const handleSkip = () => { playClickSound('/sounds/click-skip.mp3'); skipMode(); };
 
     if (isMinimized) {
         return (
             <>
+                {/* 1. DRAG BUTTON (Handle) */}
+                {/* We use a specific class 'drag-handle' for React-Draggable to target */}
+                <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={onRecenter}
+                    className="drag-handle text-white/70 hover:text-white hover:bg-white/20 rounded-full h-12 w-12 cursor-grab active:cursor-grabbing"
+                >
+                    <GripHorizontal size={24} />
+                </Button>
+
+                {/* 2. PLAY/PAUSE (Middle) */}
                 {isRunning ? (
-                    <Button variant="ghost" size="icon" onClick={handlePause} className="text-white hover:bg-white/20 rounded-full h-12 w-12"><Pause size={24} /></Button>
+                    <Button variant="ghost" size="icon" onClick={handlePause} className="text-white hover:bg-white/20 rounded-full h-12 w-12">
+                        <Pause size={24} />
+                    </Button>
                 ) : (
-                    <Button variant="ghost" size="icon" onClick={handleStart} className="text-white hover:bg-white/20 rounded-full h-12 w-12"><Play size={24} /></Button>
+                    <Button variant="ghost" size="icon" onClick={handleStart} className="text-white hover:bg-white/20 rounded-full h-12 w-12">
+                        <Play size={24} />
+                    </Button>
                 )}
-                <Button variant="ghost" size="icon" onClick={maximize} className="text-white hover:bg-white/20 rounded-full h-12 w-12"><Maximize2 size={24} /></Button>
+
+                {/* 3. EXPAND (Right) */}
+                <Button variant="ghost" size="icon" onClick={maximize} className="text-white hover:bg-white/20 rounded-full h-12 w-12">
+                    <Maximize2 size={24} />
+                </Button>
             </>
         )
     }
 
+    // ... (Regular Full View Controls remain unchanged)
     return (
         <div className="flex justify-center items-center space-x-4 mt-6">
             <Button variant="ghost" size="icon" className="text-gray-400 hover:text-white" onClick={handleReset}>
@@ -82,4 +97,3 @@ export default function TimerControls({ isRunning, startTimer, pauseTimer, reset
         </div>
     );
 }
-
