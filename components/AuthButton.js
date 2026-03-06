@@ -25,7 +25,7 @@ export default function AuthButton() {
     const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
 
     const router = useRouter();
-    const supabase = createClient();
+    const [supabase] = useState(() => createClient());
 
     const [loading, setLoading] = useState(true);
 

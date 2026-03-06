@@ -40,9 +40,11 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     // Draggable State
     const [position, setPosition] = useState({ x: 0, y: 0 });
     const isDraggingRef = useRef(false);
+    const [timerId, setTimerId] = useState(null);
     const draggableNodeRef = useRef(null);
 
-    const supabase = createClient();
+    const [supabase] = useState(() => createClient());
+    const tickSoundRef = useRef(null);
     const playSound = useKeyboardSound();
     const { saveSession } = useSessionLogger();
     const linkedTaskRef = useRef(linkedTask);

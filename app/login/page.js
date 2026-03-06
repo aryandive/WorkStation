@@ -38,8 +38,10 @@ function LoginForm() {
                 setLoading(false);
             } else {
                 setSuccess('Login successful! Redirecting...');
-                // Slight delay to show success state before redirect
-                setTimeout(() => router.push(redirectPath), 500);
+                // Force a hard redirect so AuthContext initializes with the new cookie
+                setTimeout(() => {
+                    window.location.href = redirectPath;
+                }, 500);
             }
         } catch (e) {
             setError('An unexpected error occurred.');
@@ -51,9 +53,16 @@ function LoginForm() {
         setGoogleLoading(true);
         setError('');
         try {
-            await signInWithGoogle();
-        } catch (error) {
+            const result = await signInWithGoogle();
+            if (result?.error) {
+                setError(result.error);
+            } else if (result?.url) {
+                // Perform client-side redirect to Google OAuth URL
+                window.location.href = result.url;
+            }
+        } catch (e) {
             setError('Failed to initiate Google login.');
+        } finally {
             setGoogleLoading(false);
         }
     };
@@ -91,8 +100,8 @@ function LoginForm() {
                     )}
 
                     {/* --- Email / Password Form --- */}
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="space-y-2">
+                    <form onSubmit={handleSubmit} className="space-y-4" suppressHydrationWarning>
+                        <div className="space-y-2" suppressHydrationWarning>
                             <Label htmlFor="email" className="text-gray-300 font-medium">Email</Label>
                             <Input
                                 id="email"
@@ -114,7 +123,7 @@ function LoginForm() {
                                     Forgot password?
                                 </Link>
                             </div>
-                            <div className="relative">
+                            <div className="relative" suppressHydrationWarning>
                                 <Input
                                     id="password"
                                     name="password"
@@ -135,6 +144,7 @@ function LoginForm() {
 
                         <Button
                             type="submit"
+                            suppressHydrationWarning
                             disabled={loading || googleLoading}
                             className="w-full bg-yellow-500 text-black hover:bg-yellow-400 font-bold h-10 transition-all shadow-[0_0_15px_rgba(234,179,8,0.1)] hover:shadow-[0_0_20px_rgba(234,179,8,0.3)]"
                         >
@@ -166,6 +176,7 @@ function LoginForm() {
                     <button
                         onClick={handleGoogleLogin}
                         disabled={loading || googleLoading}
+                        suppressHydrationWarning
                         aria-label="Sign in with Google"
                         className="w-full relative flex items-center bg-google-button-blue rounded-md p-1 pr-3 transition-colors duration-300 hover:bg-google-button-blue-hover disabled:opacity-70 disabled:cursor-not-allowed h-11"
                     >

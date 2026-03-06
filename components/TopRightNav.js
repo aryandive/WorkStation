@@ -10,8 +10,15 @@ import AuthButton from './AuthButton';
 import { useSubscription } from '@/context/SubscriptionContext';
 import { useAuth } from '@/context/AuthContext';
 
-// --- User Status Badge ---
-const UserStatusBadge = ({ user, isPro }) => {
+// --- UserStatusBadge ---
+const UserStatusBadge = ({ user, isPro, authLoading, subLoading }) => {
+    if (authLoading || (user && subLoading)) {
+        return (
+            <span className="hidden sm:inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full bg-gray-800 text-transparent animate-pulse w-14 h-5">
+                ...
+            </span>
+        );
+    }
     if (isPro) {
         return (
             <span className="hidden sm:inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold rounded-full bg-gradient-to-r from-yellow-500 to-amber-500 text-black shadow-[0_0_10px_rgba(234,179,8,0.4)] border border-yellow-300">
@@ -63,7 +70,7 @@ export default function TopRightNav() {
     const [isOnline, setIsOnline] = useState(true);
 
     const { isPro, loading: subLoading } = useSubscription();
-    const { isMigrating, user } = useAuth(); // Migration Spinner State and User for Badge
+    const { isMigrating, user, loading: authLoading } = useAuth(); // Migration Spinner State and User for Badge
 
     const toggleFullScreen = () => {
         if (!document.fullscreenElement) {
@@ -162,7 +169,7 @@ export default function TopRightNav() {
 
                 {/* Status Badge & Auth */}
                 <div className="pl-3 border-l border-white/20 flex items-center gap-3">
-                    <UserStatusBadge user={user} isPro={isPro} />
+                    <UserStatusBadge user={user} isPro={isPro} authLoading={authLoading} subLoading={subLoading} />
                     <AuthButton />
                 </div>
             </div>

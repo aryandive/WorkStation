@@ -10,7 +10,7 @@ export function SubscriptionProvider({ children }) {
     const { user, loading: authLoading } = useAuth();
     const [subscription, setSubscription] = useState(null);
     const [loading, setLoading] = useState(true);
-    const supabase = createClient();
+    const [supabase] = useState(() => createClient());
 
     const fetchSubscription = async () => {
         setLoading(true);

@@ -33,7 +33,7 @@ import { calculateStreaks } from '@/lib/streakUtils';
 
 export default function JournalPage() {
     // --- Auth & Data State ---
-    const { user, loading: authLoading } = useAuth();
+    const { user, loading: authLoading, isMigrating } = useAuth();
     const { isPro, loading: subLoading } = useSubscription();
     const router = useRouter();
     const supabase = createClient();
@@ -79,7 +79,7 @@ export default function JournalPage() {
     const getDateKey = (date) => `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
     const journalEntryCount = Object.keys(allEntries).length;
     const isFreeTierLimitReached = !isPro && journalEntryCount >= 30;
-    const isLoading = authLoading || subLoading;
+    const isLoading = authLoading || subLoading || isMigrating;
     const reducedMotion = typeof window !== 'undefined' ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false;
 
     const changeDate = (days) => {
@@ -169,8 +169,13 @@ export default function JournalPage() {
         setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
         fetchDailyStats();
         eventBus.on('tasksUpdated', fetchDailyStats);
-        return () => eventBus.remove('tasksUpdated', fetchDailyStats);
-    }, [fetchDailyStats]);
+        eventBus.on('journalsUpdated', fetchJournalEntries);
+
+        return () => {
+            eventBus.remove('tasksUpdated', fetchDailyStats);
+            eventBus.remove('journalsUpdated', fetchJournalEntries);
+        };
+    }, [fetchDailyStats, fetchJournalEntries]);
 
     useEffect(() => {
         const count = Object.keys(allEntries).length;
@@ -181,27 +186,7 @@ export default function JournalPage() {
 
     useEffect(() => { fetchJournalEntries(); }, [fetchJournalEntries]);
 
-    // Migration Hook: Anonymous (Tier 0) -> Free (Tier 1)
-    useEffect(() => {
-        if (user && !isLoading) {
-            const localJournals = getLocalJournals();
-            if (Object.keys(localJournals).length > 0) {
-                const migrate = async () => {
-                    const payload = Object.entries(localJournals).map(([dateKey, data]) => {
-                        const [y, m, d] = dateKey.split('-').map(Number);
-                        const isoDate = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-                        return { user_id: user.id, date: isoDate, title: data.title, content: data.content };
-                    });
-                    const { error } = await supabase.from('journal_entries').upsert(payload, { onConflict: 'user_id, date' });
-                    if (!error) {
-                        localStorage.removeItem('ws_journal_entries');
-                        fetchJournalEntries();
-                    }
-                };
-                migrate();
-            }
-        }
-    }, [user, isLoading, supabase, fetchJournalEntries]);
+    useEffect(() => { fetchJournalEntries(); }, [fetchJournalEntries]);
 
     // Risk Popup Logic (Tier 0 Only)
     useEffect(() => {

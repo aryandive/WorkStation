@@ -55,6 +55,8 @@ export async function signInWithGoogle() {
     }
 
     if (data.url) {
-        redirect(data.url);
+        // Return the URL instead of redirecting server-side
+        return { url: data.url };
     }
+    return {};
 }
