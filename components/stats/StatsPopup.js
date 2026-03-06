@@ -120,36 +120,38 @@ const FocusHistoryChart = ({ data }) => {
                     ))}
                 </div>
             </div>
-            <ResponsiveContainer width="100%" height={250}>
-                <RechartsBarChart data={currentData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                    <XAxis
-                        dataKey="name"
-                        stroke="#6B7280"
-                        fontSize={11}
-                        tickLine={false}
-                        axisLine={false}
-                        dy={5}
-                        minTickGap={20}
-                    />
-                    <YAxis
-                        stroke="#6B7280"
-                        fontSize={10}
-                        tickLine={false}
-                        axisLine={false}
-                        domain={yAxisDomain}
-                        tickFormatter={(val) => `${val}m`}
-                    />
-                    <RechartsTooltip
-                        cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
-                        contentStyle={tooltipStyle}
-                        labelStyle={{ color: '#F9FAFB', fontWeight: '600' }}
-                        itemStyle={{ color: '#8B5CF6' }}
-                        formatter={(value) => [`${value} mins`, 'Focus Time']}
-                        labelFormatter={(label, payload) => payload[0]?.payload.fullDate || label}
-                    />
-                    <Bar dataKey="minutes" fill="#8B5CF6" radius={[4, 4, 0, 0]} maxBarSize={50} animationDuration={1000} />
-                </RechartsBarChart>
-            </ResponsiveContainer>
+            <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false}>
+                <ResponsiveContainer width="100%" height={250}>
+                    <RechartsBarChart data={currentData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                        <XAxis
+                            dataKey="name"
+                            stroke="#6B7280"
+                            fontSize={11}
+                            tickLine={false}
+                            axisLine={false}
+                            dy={5}
+                            minTickGap={20}
+                        />
+                        <YAxis
+                            stroke="#6B7280"
+                            fontSize={10}
+                            tickLine={false}
+                            axisLine={false}
+                            domain={yAxisDomain}
+                            tickFormatter={(val) => `${val}m`}
+                        />
+                        <RechartsTooltip
+                            cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
+                            contentStyle={tooltipStyle}
+                            labelStyle={{ color: '#F9FAFB', fontWeight: '600' }}
+                            itemStyle={{ color: '#8B5CF6' }}
+                            formatter={(value) => [`${value} mins`, 'Focus Time']}
+                            labelFormatter={(label, payload) => payload[0]?.payload.fullDate || label}
+                        />
+                        <Bar dataKey="minutes" fill="#8B5CF6" radius={[4, 4, 0, 0]} maxBarSize={50} animationDuration={1000} />
+                    </RechartsBarChart>
+                </ResponsiveContainer>
+            </PremiumGate>
         </div>
     );
 };
@@ -205,33 +207,35 @@ const CalendarHeatmap = ({ data }) => {
         <div className="flex flex-col gap-2">
             <TooltipProvider>
                 <div className="overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-transparent">
-                    <div className="grid grid-rows-7 grid-flow-col gap-1 w-max min-w-full" style={{ height: '140px' }}>
-                        {days.map((day) => {
-                            const dateKey = startOfDay(day).toISOString();
-                            const minutes = data[dateKey] || 0;
-                            const isToday = isSameDay(day, new Date());
+                    <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false} className="w-max min-w-full">
+                        <div className="grid grid-rows-7 grid-flow-col gap-1 w-max min-w-full" style={{ height: '140px' }}>
+                            {days.map((day) => {
+                                const dateKey = startOfDay(day).toISOString();
+                                const minutes = data[dateKey] || 0;
+                                const isToday = isSameDay(day, new Date());
 
-                            return (
-                                <Tooltip key={dateKey} delayDuration={0}>
-                                    <TooltipTrigger asChild>
-                                        <div
-                                            className={cn(
-                                                "w-3 h-3 rounded-[2px] transition-all duration-200 cursor-pointer",
-                                                getColor(minutes),
-                                                isToday && "ring-1 ring-white ring-offset-1 ring-offset-black"
-                                            )}
-                                        />
-                                    </TooltipTrigger>
-                                    <TooltipContent className="bg-gray-900 border-gray-700 text-white text-xs">
-                                        <div className="text-center">
-                                            <p className="font-semibold text-emerald-400">{minutes} minutes</p>
-                                            <p className="text-gray-400">{format(day, 'EEE, MMM d, yyyy')}</p>
-                                        </div>
-                                    </TooltipContent>
-                                </Tooltip>
-                            );
-                        })}
-                    </div>
+                                return (
+                                    <Tooltip key={dateKey} delayDuration={0}>
+                                        <TooltipTrigger asChild>
+                                            <div
+                                                className={cn(
+                                                    "w-3 h-3 rounded-[2px] transition-all duration-200 cursor-pointer",
+                                                    getColor(minutes),
+                                                    isToday && "ring-1 ring-white ring-offset-1 ring-offset-black"
+                                                )}
+                                            />
+                                        </TooltipTrigger>
+                                        <TooltipContent className="bg-gray-900 border-gray-700 text-white text-xs">
+                                            <div className="text-center">
+                                                <p className="font-semibold text-emerald-400">{minutes} minutes</p>
+                                                <p className="text-gray-400">{format(day, 'EEE, MMM d, yyyy')}</p>
+                                            </div>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                );
+                            })}
+                        </div>
+                    </PremiumGate>
                 </div>
             </TooltipProvider>
 
@@ -260,8 +264,8 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
     const fileInputRef = useRef(null);
 
     // --- Tier 1: Dummy Data Injector ---
-    const { dummyProjectData, dummyHeatmapData } = useMemo(() => {
-        if (isPro) return { dummyProjectData: null, dummyHeatmapData: null };
+    const { dummyProjectData, dummyHeatmapData, dummyStats, dummyChartData } = useMemo(() => {
+        if (isPro) return { dummyProjectData: null, dummyHeatmapData: null, dummyStats: null, dummyChartData: null };
 
         // Synthesize beautiful, fake distribution data
         const dummyProjectData = {
@@ -282,7 +286,36 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
             }
         }
 
-        return { dummyProjectData, dummyHeatmapData };
+        const dummyStats = {
+            daysAccessed: 142,
+            bestFocusMinutes: 280,
+            bestDayDate: "Oct 12, 2025",
+            allTimeFocusMinutes: 14500,
+            weeklyGrowthPercentage: 24
+        };
+
+        const dummyChartData = {
+            weekly: [
+                { name: 'Mon', fullDate: 'Mon', minutes: 45 }, { name: 'Tue', fullDate: 'Tue', minutes: 120 },
+                { name: 'Wed', fullDate: 'Wed', minutes: 90 }, { name: 'Thu', fullDate: 'Thu', minutes: 150 },
+                { name: 'Fri', fullDate: 'Fri', minutes: 60 }, { name: 'Sat', fullDate: 'Sat', minutes: 30 },
+                { name: 'Sun', fullDate: 'Sun', minutes: 0 }
+            ],
+            monthly: [
+                { name: 'Week 1', fullDate: 'Week 1', minutes: 400 }, { name: 'Week 2', fullDate: 'Week 2', minutes: 550 },
+                { name: 'Week 3', fullDate: 'Week 3', minutes: 320 }, { name: 'Week 4', fullDate: 'Week 4', minutes: 480 }
+            ],
+            yearly: [
+                { name: 'Jan', fullDate: 'Jan', minutes: 1200 }, { name: 'Feb', fullDate: 'Feb', minutes: 1450 },
+                { name: 'Mar', fullDate: 'Mar', minutes: 1100 }, { name: 'Apr', fullDate: 'Apr', minutes: 1600 },
+                { name: 'May', fullDate: 'May', minutes: 1350 }, { name: 'Jun', fullDate: 'Jun', minutes: 1800 },
+                { name: 'Jul', fullDate: 'Jul', minutes: 1500 }, { name: 'Aug', fullDate: 'Aug', minutes: 1400 },
+                { name: 'Sep', fullDate: 'Sep', minutes: 1750 }, { name: 'Oct', fullDate: 'Oct', minutes: 1900 },
+                { name: 'Nov', fullDate: 'Nov', minutes: 2100 }, { name: 'Dec', fullDate: 'Dec', minutes: 900 }
+            ]
+        };
+
+        return { dummyProjectData, dummyHeatmapData, dummyStats, dummyChartData };
     }, [isPro]);
 
     // --- Tier 0: Data Risk Throttle ---
@@ -522,18 +555,24 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="flex-grow flex flex-col justify-center">
-                                            <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false}>
-                                                <CalendarHeatmap data={!isPro ? dummyHeatmapData : stats.productivityHeatmap} />
-                                            </PremiumGate>
+                                            <CalendarHeatmap data={!isPro ? dummyHeatmapData : stats.productivityHeatmap} />
                                         </CardContent>
                                     </Card>
                                 </div>
 
                                 <div className={cn("grid grid-cols-2 md:grid-cols-4 gap-4", !user && "opacity-20 pointer-events-none blur-sm")}>
-                                    <StatCard icon={<Calendar className="h-4 w-4 text-yellow-400" />} label="Total Days Accessed" value={stats.daysAccessed} unit="days" colorClass="text-yellow-400" />
-                                    <StatCard icon={<Trophy className="h-4 w-4 text-orange-400" />} label="Best Day Record" value={stats.bestFocusMinutes} unit="m" subtext={stats.bestDayDate || "No data yet"} colorClass="text-orange-400" />
-                                    <StatCard icon={<Clock className="h-4 w-4 text-blue-400" />} label="All Time" value={Math.floor(stats.allTimeFocusMinutes / 60)} unit="h" subtext={`${stats.allTimeFocusMinutes % 60}m remaining`} />
-                                    <StatCard icon={<TrendingUp className="h-4 w-4 text-green-400" />} label="Growth" value={`${stats.weeklyGrowthPercentage > 0 ? '+' : ''}${stats.weeklyGrowthPercentage}`} unit="%" colorClass={stats.weeklyGrowthPercentage >= 0 ? "text-green-400" : "text-red-400"} subtext="vs Last Week" />
+                                    <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false} className="col-span-1">
+                                        <StatCard icon={<Calendar className="h-4 w-4 text-yellow-400" />} label="Total Days Accessed" value={!isPro && user ? dummyStats.daysAccessed : stats.daysAccessed} unit="days" colorClass="text-yellow-400" />
+                                    </PremiumGate>
+                                    <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false} className="col-span-1">
+                                        <StatCard icon={<Trophy className="h-4 w-4 text-orange-400" />} label="Best Day Record" value={!isPro && user ? dummyStats.bestFocusMinutes : stats.bestFocusMinutes} unit="m" subtext={!isPro && user ? dummyStats.bestDayDate : (stats.bestDayDate || "No data yet")} colorClass="text-orange-400" />
+                                    </PremiumGate>
+                                    <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false} className="col-span-1">
+                                        <StatCard icon={<Clock className="h-4 w-4 text-blue-400" />} label="All Time" value={!isPro && user ? Math.floor(dummyStats.allTimeFocusMinutes / 60) : Math.floor(stats.allTimeFocusMinutes / 60)} unit="h" subtext={`${!isPro && user ? dummyStats.allTimeFocusMinutes % 60 : stats.allTimeFocusMinutes % 60}m remaining`} />
+                                    </PremiumGate>
+                                    <PremiumGate featureKey="historical_stats" requiredTier={2} hideLock={false} className="col-span-1">
+                                        <StatCard icon={<TrendingUp className="h-4 w-4 text-green-400" />} label="Growth" value={`${(!isPro && user ? dummyStats.weeklyGrowthPercentage : stats.weeklyGrowthPercentage) > 0 ? '+' : ''}${!isPro && user ? dummyStats.weeklyGrowthPercentage : stats.weeklyGrowthPercentage}`} unit="%" colorClass={(!isPro && user ? dummyStats.weeklyGrowthPercentage : stats.weeklyGrowthPercentage) >= 0 ? "text-green-400" : "text-red-400"} subtext="vs Last Week" />
+                                    </PremiumGate>
                                 </div>
 
                                 <Card className={cn("bg-gray-800/20 border-gray-800", !user && "opacity-20 pointer-events-none blur-sm")}>
@@ -543,7 +582,7 @@ export default function StatsPopup({ isOpen, setIsOpen }) {
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent className="pt-4">
-                                        <FocusHistoryChart data={stats.chartData} />
+                                        <FocusHistoryChart data={!isPro && user ? dummyChartData : stats.chartData} />
                                     </CardContent>
                                 </Card>
                             </div>

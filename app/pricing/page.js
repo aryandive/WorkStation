@@ -95,7 +95,6 @@ export default function PricingPage() {
     const [error, setError] = useState(null);
     const router = useRouter();
     const { user, loading: authLoading } = useAuth();
-
     // Scarcity Logic: Static start to feel real
     const [spotsLeft, setSpotsLeft] = useState(17);
 
@@ -106,6 +105,15 @@ export default function PricingPage() {
         intent: "capture", // Changed to 'capture' for one-time payments (standard for Orders)
         vault: true,       // Keep vault true for the subscription buttons to work in the same provider
     }), []);
+
+    // Show a loading placeholder while auth state resolves
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-screen bg-[#1A202C]">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-yellow-400" />
+            </div>
+        );
+    }
 
     const handleApproveSubscription = async (data) => {
         console.log("Subscription successful:", data);
@@ -312,7 +320,7 @@ function PricingCard({ tier, user, authLoading, router, onApproveSubscription, o
             <div className="mt-auto pt-4">
                 {isFree ? (
                     <Button
-                        asChild={!user}
+                        asChild={!user && !authLoading}
                         onClick={handleFreeClick}
                         className="w-full h-12 text-base font-bold bg-gray-700 hover:bg-gray-600 text-white shadow-lg cursor-pointer"
                     >

@@ -12,8 +12,8 @@ export function AuthProvider({ children }) {
     const [loading, setLoading] = useState(true);
     // --- NEW: Track Migration Status for UI ---
     const [isMigrating, setIsMigrating] = useState(false);
-    
-    const supabase = createClient();
+
+    const [supabase] = useState(() => createClient());
 
     // --- MIGRATION LOGIC (The Bridge) ---
     const migrateGuestData = useCallback(async (userId) => {
@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
         const localProjects = JSON.parse(localStorage.getItem('ws_projects') || '[]');
         const localTasks = JSON.parse(localStorage.getItem('ws_tasks') || '[]');
         const localJournals = JSON.parse(localStorage.getItem('ws_journal_entries') || '{}');
-        
+
         const hasJournals = Object.keys(localJournals).length > 0;
         const hasTasks = localProjects.length > 0 || localTasks.length > 0;
 
@@ -54,7 +54,7 @@ export function AuthProvider({ children }) {
 
             // --- B. Migrate Projects & Tasks ---
             if (hasTasks) {
-                const idMap = {}; 
+                const idMap = {};
 
                 // Projects
                 for (const p of localProjects) {
@@ -74,7 +74,7 @@ export function AuthProvider({ children }) {
                     return {
                         ...taskData,
                         user_id: userId,
-                        project_id: idMap[t.project_id] || null 
+                        project_id: idMap[t.project_id] || null
                     };
                 });
 
@@ -89,13 +89,13 @@ export function AuthProvider({ children }) {
             localStorage.removeItem('ws_tasks');
             localStorage.removeItem('ws_focus_sessions');
             localStorage.removeItem('ws_journal_entries'); // Clear journals
-            
+
             localStorage.setItem('ws_migration_done', 'true');
-            
+
             // Notify System
             eventBus.dispatch('tasksUpdated');
-            // We can also dispatch a 'journalsUpdated' if your journal page listens for it
-            
+            eventBus.dispatch('journalsUpdated');
+
         } catch (err) {
             console.error("Migration Critical Failure:", err);
         } finally {

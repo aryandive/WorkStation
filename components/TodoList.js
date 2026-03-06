@@ -59,7 +59,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
     const [isFocusMode, setIsFocusMode] = useState(false);
     const [isAutoJournalingEnabled, setIsAutoJournalingEnabled] = useState(true);
 
-    const supabase = createClient();
+    const [supabase] = useState(() => createClient());
     const completionSoundRef = useRef(null);
 
     // STEP C: Ref to track last fetch time for caching
