@@ -87,7 +87,8 @@ export default function AuthButton() {
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="relative h-10 w-10 rounded-full bg-gradient-to-br from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 border border-white/10 shadow-lg p-0 overflow-hidden">
+                    {/* HIG: min-w/min-h instead of fixed w-10 h-10 so tap target is ≥44px */}
+                    <Button variant="ghost" className="relative h-10 w-10 max-md:min-w-[44px] max-md:min-h-[44px] rounded-full bg-gradient-to-br from-gray-700 to-gray-800 hover:from-gray-600 hover:to-gray-700 border border-white/10 shadow-lg p-0 overflow-hidden">
                         {/* Avatar Placeholder: Uses initials of display name or email */}
                         <span className="font-bold text-gray-200">
                             {(profileName || user.email || 'U').charAt(0).toUpperCase()}

@@ -40,6 +40,7 @@ export default function JournalPage() {
 
     // --- UI State ---
     const [greeting, setGreeting] = useState('');
+    const [dayProgress, setDayProgress] = useState(0);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [displayName, setDisplayName] = useState('');
     const [isSignUpModalOpen, setIsSignUpModalOpen] = useState(false);
@@ -167,6 +168,10 @@ export default function JournalPage() {
     useEffect(() => {
         const hour = new Date().getHours();
         setGreeting(hour < 12 ? 'Good Morning' : hour < 18 ? 'Good Afternoon' : 'Good Evening');
+        // Day progress: seconds elapsed out of 86400 total seconds in a day
+        const now = new Date();
+        const secondsElapsed = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        setDayProgress(Math.round((secondsElapsed / 86400) * 100));
         fetchDailyStats();
         eventBus.on('tasksUpdated', fetchDailyStats);
         eventBus.on('journalsUpdated', fetchJournalEntries);
@@ -372,7 +377,8 @@ export default function JournalPage() {
 
             <div className="flex flex-col flex-grow py-4 px-3 sm:px-6 md:px-8 lg:px-12 gap-5 max-w-[1920px] mx-auto w-full">
 
-                <header className="flex-shrink-0 h-48 lg:h-56 relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
+                {/* Desktop header — hidden on mobile so mobile widget takes its place */}
+                <header className="hidden md:flex flex-shrink-0 h-48 lg:h-56 relative rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
                     <div className="absolute inset-0 w-full h-full z-0">
                         <video src="/video123.webm" autoPlay loop muted playsInline className="absolute inset-0 w-full h-full object-cover" aria-hidden />
                     </div>
@@ -389,49 +395,119 @@ export default function JournalPage() {
                     <Greeting greeting={greeting} username={displayName || user?.email?.split('@')[0] || 'Explorer'} />
                 </header>
 
-                <div className="lg:hidden flex justify-end">
-                    <Button variant="outline" size="sm" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="bg-gray-800 border-gray-700 text-yellow-400 hover:text-yellow-300">
-                        {isSidebarOpen ? <><PanelTopClose className="mr-2 h-4 w-4" /> Hide Tools</> : <><PanelTopOpen className="mr-2 h-4 w-4" /> Show Tools</>}
-                    </Button>
-                </div>
+                {/* ── Mobile-Only section: video underlay + widget + hide-tools toggle ──
+                     md:hidden → entire block disappears on tablet/desktop.
+                     The <video> plays behind the widget for the immersive look the
+                     desktop <header> provides on larger screens.                        */}
+                <div className="flex flex-col md:hidden relative rounded-2xl overflow-hidden">
+                    {/* Background video — mirrors the desktop header video */}
+                    <video
+                        src="/video123.webm"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="absolute inset-0 w-full h-full object-cover object-center"
+                        aria-hidden
+                    />
+                    {/* Dark gradient so white text stays legible */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/70 pointer-events-none" />
 
-                <main className="flex-grow flex flex-col lg:flex-row gap-5 h-full">
-                    <aside className={cn("w-full lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 lg:sticky lg:top-6 lg:self-start lg:h-fit overflow-hidden", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
-                        <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
-                            <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">Today</button>
-                            <div className="relative w-full">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                                <input type="search" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all" />
-                            </div>
+                    {/* ── Date / Progress / Quote widget (unchanged content) ── */}
+                    <div className="relative z-10 flex flex-col gap-1 pt-4 pb-2 px-4 animate-fade-in">
+                        {/* Current date */}
+                        <p className="text-xs font-medium tracking-widest uppercase text-white/60 leading-none">
+                            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                        </p>
+
+                        {/* Day Progress */}
+                        <div className="flex items-baseline gap-2">
+                            <span className="text-4xl font-black text-white leading-none tracking-tight">{dayProgress}%</span>
+                            <span className="text-xs text-white/50 font-medium leading-none">of today done</span>
                         </div>
 
-                        <JournalCalendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
-                        <HabitStreak current={streaks.current} best={streaks.best} />
-                        <ReflectivePrompt dailyStats={dailyStats} />
-                    </aside>
+                        {/* Thin progress bar */}
+                        <div className="w-full h-0.5 bg-white/10 rounded-full overflow-hidden mt-0.5">
+                            <div
+                                className="h-full bg-yellow-400/70 rounded-full transition-all duration-1000"
+                                style={{ width: `${dayProgress}%` }}
+                            />
+                        </div>
 
-                    <div {...editorWrapperProps} className="flex-grow min-h-[500px] lg:h-auto">
-                        <TextEditor
-                            ref={editorRef}
-                            entry={entry}
-                            onEntryChange={handleEntryChange}
-                            dailyStats={dailyStats}
-                            isPro={isPro}
-                            user={user}
-                            isPastDate={isPastDate}
-                            isFutureDate={isFutureDate}
-                            isEditMode={isEditMode}
-                            setIsEditMode={setIsEditMode}
-                            isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
-                            saveStatus={saveStatus}
-                            onNavigate={changeDate}
-                            isContentLoading={isContentLoading}
-                            onEntriesClick={() => setIsEntriesListOpen(true)}
-                            onSnapshotClick={() => setIsSnapshotOpen(true)}
-                        />
+                        {/* Quote */}
+                        <div className="mt-2 flex flex-col gap-0.5">
+                            <p className="text-[10px] font-bold tracking-widest uppercase text-yellow-400/80 leading-none">Thought for the Day</p>
+                            <p className="text-sm text-white/80 leading-snug italic">
+                                &ldquo;Success is not final, failure is not fatal: it is the courage to continue that counts.&rdquo;
+                            </p>
+                            <p className="text-[11px] text-white/40 font-medium not-italic mt-0.5">&mdash; Winston Churchill</p>
+                        </div>
                     </div>
-                </main>
-            </div>
+
+                    {/* ── Hide/Show Tools toggle (unchanged logic) ── */}
+                    <div className="relative z-10 flex justify-end px-4 pb-3 pt-1">
+                        <Button variant="outline" size="sm" onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="bg-black/30 border-white/20 text-yellow-400 hover:text-yellow-300 backdrop-blur-sm">
+                            {isSidebarOpen ? <><PanelTopClose className="mr-2 h-4 w-4" /> Hide Tools</> : <><PanelTopOpen className="mr-2 h-4 w-4" /> Show Tools</>}
+                        </Button>
+                    </div>
+                </div>
+
+
+
+            <main className="flex-grow flex flex-col md:grid md:grid-cols-12 md:gap-6 lg:flex lg:flex-row gap-5 h-full">
+                <aside className={cn("w-full md:col-span-5 lg:w-1/3 lg:max-w-xs flex-shrink-0 flex flex-col gap-5 transition-all duration-300 lg:sticky lg:top-6 lg:self-start lg:h-fit overflow-hidden md:sticky md:top-6 md:h-[calc(100dvh-12rem)] md:overflow-y-auto custom-scrollbar", isSidebarOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0 lg:max-h-none lg:opacity-100 lg:w-1/3 lg:block hidden")}>
+                    <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-4 rounded-2xl shadow-lg border border-gray-700 flex items-center gap-3">
+                        <button onClick={() => safeSetSelectedDate(new Date())} className="flex-1 bg-gradient-to-r from-yellow-500 to-yellow-600 text-gray-900 font-bold py-2.5 px-4 rounded-xl hover:from-yellow-400 hover:to-yellow-500 transition-all shadow-md">Today</button>
+                        <div className="relative w-full">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                            <input type="search" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-800 border border-gray-700 rounded-xl py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all" />
+                        </div>
+                    </div>
+
+                    <JournalCalendar onDateSelect={safeSetSelectedDate} allEntries={allEntries} selectedDate={selectedDate} searchFilter={filteredEntryDays} />
+                    <HabitStreak current={streaks.current} best={streaks.best} />
+                    <ReflectivePrompt dailyStats={dailyStats} />
+                </aside>
+
+                <div {...editorWrapperProps} className="flex-grow md:col-span-7 min-h-[500px] lg:h-auto">
+                    <TextEditor
+                        ref={editorRef}
+                        entry={entry}
+                        onEntryChange={handleEntryChange}
+                        dailyStats={dailyStats}
+                        isPro={isPro}
+                        user={user}
+                        isPastDate={isPastDate}
+                        isFutureDate={isFutureDate}
+                        isEditMode={isEditMode}
+                        setIsEditMode={setIsEditMode}
+                        isSavingDisabled={isFreeTierLimitReached && !allEntries[getDateKey(selectedDate)]}
+                        saveStatus={saveStatus}
+                        onNavigate={changeDate}
+                        isContentLoading={isContentLoading}
+                        onEntriesClick={() => setIsEntriesListOpen(true)}
+                        onSnapshotClick={() => setIsSnapshotOpen(true)}
+                    />
+                </div>
+            </main>
         </div>
+
+            {/* ── Mobile Floating "Reveal Tools" button ────────────────────────────────
+                 md:hidden  → never renders on desktop.
+                 fixed       → lives above all stacked content, keyboard-safe.
+                 Only visible when the sidebar has been hidden by the user.        */}
+    {
+        !isSidebarOpen && (
+            <button
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Reveal tools panel"
+                className="md:hidden fixed bottom-6 right-6 z-50 min-w-[44px] min-h-[44px] p-3 flex items-center justify-center gap-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-white shadow-lg active:scale-95 transition-transform animate-in fade-in slide-in-from-bottom-4 duration-300"
+            >
+                <PanelTopOpen className="w-5 h-5" />
+                <span className="text-xs font-semibold pr-1">Tools</span>
+            </button>
+        )
+    }
+        </div >
     );
 }

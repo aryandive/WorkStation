@@ -285,8 +285,16 @@ const TextEditor = forwardRef(({
                     onInput={handleContentInput}
                     onMouseUp={handleSelectionChange}
                     onKeyUp={handleSelectionChange}
+                    onFocus={(e) => {
+                        // iOS virtual keyboard safety: scroll cursor into view when keyboard raises
+                        requestAnimationFrame(() => {
+                            e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        });
+                    }}
                     className={cn(
-                        "prose prose-invert max-w-none w-full h-full overflow-y-auto custom-scrollbar p-6 leading-relaxed focus:outline-none pb-20",
+                        // pb-[50vh] gives the cursor room to breathe above the iOS virtual keyboard.
+                        // Desktop: overflow-y-auto already limits scroll to section height, no visual change.
+                        "prose prose-invert max-w-none w-full h-full overflow-y-auto custom-scrollbar p-6 leading-relaxed focus:outline-none pb-[50vh]",
                         isLocked ? 'opacity-80' : ''
                     )}
                     placeholder={isFutureDate ? "Dear Future Me..." : "Start writing here..."}

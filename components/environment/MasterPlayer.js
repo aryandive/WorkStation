@@ -90,7 +90,7 @@ export default function MasterPlayer() {
 
     return (
         <div
-            className="fixed inset-0 w-full h-full z-0 bg-black select-none"
+            className="fixed inset-0 w-full h-full overflow-hidden z-0 bg-black select-none"
             onContextMenu={protectMedia}
         >
             {/* --- NEW: Autoplay Blocker Overlay --- */}
@@ -118,7 +118,7 @@ export default function MasterPlayer() {
                         priority
                         quality={90}
                         sizes="100vw"
-                        className="object-cover"
+                        className="object-cover object-center"
                         draggable={false}
                         onError={(e) => {
                             e.target.src = '/placeholder.webp';
@@ -135,7 +135,7 @@ export default function MasterPlayer() {
                     ref={videoRef}
                     key={activeScene.path}
                     src={activeScene.path}
-                    className="absolute inset-0 w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover object-center"
                     autoPlay={isGlobalPlaying}
                     loop
                     muted
@@ -148,7 +148,8 @@ export default function MasterPlayer() {
             {/* --- LAYER 3: YOUTUBE SCENE --- */}
             {activeScene.type === 'youtube-scene' && (
                 <div className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none z-0">
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120vw] h-[120vh]">
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                        style={{ width: 'max(120vw, 177.78vh)', height: 'max(120vh, 56.25vw)' }}>
                         <iframe
                             src={bgYoutubeSrc}
                             title="Background Ambience"
@@ -158,6 +159,7 @@ export default function MasterPlayer() {
                             onLoad={handleVideoLoad}
                         />
                     </div>
+
                 </div>
             )}
 

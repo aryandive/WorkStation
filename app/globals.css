@@ -64,6 +64,9 @@ html {
   /* UX: Better font rendering */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* FIX: Lock root height to dynamic viewport — prevents address-bar jump */
+  height: 100%;
+  height: 100dvh;
 }
 
 @layer base {
@@ -75,6 +78,10 @@ html {
     color: hsl(var(--foreground));
     background: radial-gradient(circle at top, hsl(var(--background)) 0%, hsl(var(--foreground)) 150%);
     overflow-y: scroll;
+    /* FIX: Use dynamic viewport height — eradicates 100vh address-bar jump */
+    min-height: 100dvh;
+    /* FIX: Prevent iOS double-tap zoom while preserving vertical scroll */
+    touch-action: pan-y;
   }
 }
 

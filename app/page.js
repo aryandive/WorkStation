@@ -31,6 +31,8 @@ export default function PomodoroTimerPage() {
 
   // Zen Mode State (Default: False = UI Visible)
   const [isZenMode, setIsZenMode] = useState(false);
+  // Logo menu: hover on desktop, click-toggle on mobile
+  const [isLogoMenuOpen, setIsLogoMenuOpen] = useState(false);
 
   // Contexts
   const { toggleGlobalPlay } = useEnvironment(); // Kept in case you want to map it to a keybind later, but removed from UI
@@ -142,16 +144,43 @@ export default function PomodoroTimerPage() {
             })}
           </div>
 
-          {/* Bottom Left: Socials */}
-          <div className={cn('absolute bottom-6 left-6', fadeClass)}>
+          {/* Bottom Left: Socials — lifted above feature nav on mobile */}
+          <div className={cn('absolute bottom-28 left-6 md:bottom-6', fadeClass)}>
             <Social />
           </div>
 
-          {/* Bottom Right: Logo/Menu */}
-          <div className={cn("absolute bottom-6 right-6", fadeClass)}>
+          {/* Bottom Right: Logo/Menu — lifted above feature nav on mobile */}
+          <div className={cn("absolute bottom-28 right-6 md:bottom-6", fadeClass)}>
             <div className="relative group inline-block">
-              <Image src="/logo.webp" alt="Logo" width={50} height={50} className="cursor-pointer rounded-md" />
-              <div className="absolute bottom-full right-0 mb-2 w-48 bg-gray-800 text-white text-sm rounded-lg shadow-lg p-3 opacity-0 scale-95 group-hover:opacity-100 group-hover:scale-100 pointer-events-none group-hover:pointer-events-auto transition-all duration-400 delay-200 ease-out transform origin-bottom-right z-10">
+              {/* Click-away backdrop: mobile only, dismisses menu on outside tap */}
+              {isLogoMenuOpen && (
+                <div
+                  className="md:hidden fixed inset-0 z-0"
+                  onClick={() => setIsLogoMenuOpen(false)}
+                  aria-hidden="true"
+                />
+              )}
+              <Image
+                src="/logo.webp"
+                alt="Logo"
+                width={50}
+                height={50}
+                className="cursor-pointer rounded-md relative z-10"
+                onClick={() => setIsLogoMenuOpen(prev => !prev)}
+              />
+              {/* Menu popup:
+                  Desktop: shown by CSS group-hover (unchanged).
+                  Mobile:  forced open/closed via isLogoMenuOpen state classes.
+                  The conditional classes are appended after the base classes so
+                  they win when isLogoMenuOpen is true. */}
+              <div className={cn(
+                "absolute bottom-full right-0 mb-2 w-48 bg-gray-800 text-white text-sm rounded-lg shadow-lg p-3",
+                "opacity-0 scale-95 pointer-events-none",
+                "group-hover:opacity-100 group-hover:scale-100 group-hover:pointer-events-auto",
+                "transition-all duration-300 delay-200 ease-out transform origin-bottom-right z-10",
+                // Mobile tap-to-open override — forces visibility without :hover
+                isLogoMenuOpen && "opacity-100 scale-100 pointer-events-auto"
+              )}>
                 <div className="font-bold mb-1">Work Station</div>
                 <div className="mb-1">
                   <a href="/help" className="underline hover:text-blue-300">Need Help</a>
