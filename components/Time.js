@@ -60,7 +60,7 @@ export default function TimeWidget() {
     // Fallback content while waiting for client-side hydration to prevent mismatch.
     if (!isMounted) {
         return (
-            <div className="w-full max-w-[280px] p-4 bg-black/20 backdrop-blur-lg border border-white/10 rounded-2xl text-white shadow-2xl flex items-center justify-center h-[240px]">
+            <div className="w-full max-w-[280px] p-3 md:p-4 bg-black/20 backdrop-blur-lg border border-white/10 rounded-2xl text-white shadow-2xl flex items-center justify-center h-[240px]">
                 <Clock className="animate-spin" />
             </div>
         );
@@ -68,16 +68,16 @@ export default function TimeWidget() {
 
     return (
         // UI/UX Improvement: Reduced max-width, padding, and height for a more compact design. Replaced justify-between with gap-4 for consistent spacing.
-        <div className="w-full max-w-[280px] p-4 bg-black/20 backdrop-blur-lg border border-white/10 rounded-2xl text-white shadow-2xl flex flex-col gap-4 h-auto">
+        <div className="w-full max-w-[280px] p-3 md:p-4 bg-black/20 backdrop-blur-lg border border-white/10 rounded-2xl text-white shadow-2xl flex flex-col gap-2 md:gap-4 h-auto">
 
             {/* Main Time and Date Display */}
             <div className="text-center">
                 {/* UI/UX Improvement: Reduced font size for a smaller footprint. */}
                 <div className="flex items-end justify-center">
-                    <span className="text-5xl font-bold font-mono tracking-tighter leading-none">
+                    <span className="text-4xl md:text-5xl font-bold font-mono tracking-tighter leading-none">
                         {timeParts[0]}:{timeParts[1]}
                     </span>
-                    <span className="text-xl font-mono font-medium leading-none pb-1">
+                    <span className="text-lg md:text-xl font-mono font-medium leading-none pb-1">
                         :{timeParts[2]}
                     </span>
                 </div>
