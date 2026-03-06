@@ -48,9 +48,9 @@ const IconButton = ({ src, alt, tooltip, onClick, href }) => {
         <button
             onClick={onClick}
             aria-label={alt}
-            className="p-2 max-md:p-0 max-md:min-w-[44px] max-md:min-h-[44px] max-md:flex max-md:items-center max-md:justify-center bg-black/20 border border-white/10 rounded-full hover:bg-white/20 active:md:bg-transparent transition-colors duration-200"
+            className="p-1.5 md:p-2 max-md:min-w-[44px] max-md:min-h-[44px] max-md:flex max-md:items-center max-md:justify-center bg-black/20 border border-white/10 rounded-full hover:bg-white/20 active:md:bg-transparent transition-colors duration-200"
         >
-            <Image width={20} height={20} src={src} alt="" aria-hidden="true" className="invert-[.8]" />
+            <Image width={20} height={20} src={src} alt="" aria-hidden="true" className="invert-[.8] w-4 h-4 md:w-5 md:h-5" />
         </button>
     );
 
@@ -142,7 +142,7 @@ export default function TopRightNav() {
 
     return (
         <>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5 md:gap-3">
                 {/* --- Sync Indicator --- */}
                 {!subLoading && (
                     <div className="hidden md:block mr-1">
@@ -172,7 +172,7 @@ export default function TopRightNav() {
                 <IconButton src="/fullscreen.svg" alt="Toggle Fullscreen" tooltip={isFullscreen ? 'Exit Fullscreen' : 'Enter Fullscreen'} onClick={toggleFullScreen} />
 
                 {/* Status Badge & Auth */}
-                <div className="pl-3 border-l border-white/20 flex items-center gap-3">
+                <div className="pl-2 md:pl-3 border-l border-white/20 flex items-center gap-1.5 md:gap-3">
                     <UserStatusBadge user={user} isPro={isPro} authLoading={authLoading} subLoading={subLoading} />
                     <AuthButton />
                 </div>

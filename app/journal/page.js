@@ -411,7 +411,6 @@ export default function JournalPage() {
                         muted
                         playsInline
                         preload="none"
-                        poster="/placeholder.webp"
                         className="absolute inset-0 w-full h-full object-cover object-center"
                         aria-hidden
                     />
