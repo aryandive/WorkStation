@@ -164,12 +164,14 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
 
     if (!isStoreLoaded || authLoading) {
         return (
-            <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in backdrop-blur-sm">
-                <Card className="w-full max-w-sm bg-gray-900/90 border-gray-700/50">
-                    <CardContent className="h-[400px] flex items-center justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-yellow-500" />
-                    </CardContent>
-                </Card>
+            <div className="fixed inset-0 bg-black/60 overflow-y-auto z-50 animate-in fade-in backdrop-blur-sm p-4">
+                <div className="min-h-full flex items-center justify-center py-8">
+                    <Card className="w-full max-w-sm bg-gray-900/90 border-gray-700/50">
+                        <CardContent className="h-[400px] flex items-center justify-center">
+                            <Loader2 className="h-8 w-8 animate-spin text-yellow-500" />
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         );
     }
@@ -218,55 +220,59 @@ export default function PomodoroTimer({ isOpen, setIsOpen, onTaskTimeUpdateRef }
     }
 
     return (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 animate-in fade-in backdrop-blur-sm">
-            <Card className="w-full max-w-sm bg-gray-900/90 backdrop-blur-md border-gray-700/50 text-white shadow-2xl">
-                <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-xl font-bold">Pomodoro</CardTitle>
-                    <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)} className="text-gray-400 hover:text-white h-8 w-8"><Settings size={18} /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-white h-8 w-8"><X size={20} /></Button>
-                    </div>
-                </CardHeader>
-                <CardContent className="flex flex-col items-center p-6 pt-2">
-                    <div className="flex gap-2 bg-gray-800/50 p-1 rounded-lg mb-4">
-                        {['work', 'break', 'longBreak'].map(m => (
-                            <Button
-                                key={m}
-                                onClick={() => setMode(m)}
-                                variant="ghost"
-                                className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === m && colorMap[m].button)}
-                            >
-                                {m === 'work' ? 'Focus' : m === 'break' ? 'Short Break' : 'Long Break'}
-                            </Button>
-                        ))}
-                    </div>
-                    <div className="relative my-4">
-                        <ProgressCircle progress={progress} colorClass={colorMap[mode].progress} />
-                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                            <div className="flex items-end drop-shadow-xl text-white">
-                                <span className="text-7xl font-mono font-bold tabular-nums">{minutes}</span>
-                                <span className="text-5xl font-mono pb-1 tabular-nums">:{seconds}</span>
+        // overflow-y-auto on the backdrop lets the modal scroll on landscape phones.
+        // The Card stays centered on tall screens; on short screens the user scrolls.
+        <div className="fixed inset-0 bg-black/60 overflow-y-auto z-50 animate-in fade-in backdrop-blur-sm p-4">
+            <div className="min-h-full flex items-center justify-center py-8">
+                <Card className="w-full max-w-sm bg-gray-900/90 backdrop-blur-md border-gray-700/50 text-white shadow-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                        <CardTitle className="text-xl font-bold">Pomodoro</CardTitle>
+                        <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => setIsSettingsOpen(true)} className="text-gray-400 hover:text-white h-8 w-8"><Settings size={18} /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-white h-8 w-8"><X size={20} /></Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center p-6 pt-2">
+                        <div className="flex gap-2 bg-gray-800/50 p-1 rounded-lg mb-4">
+                            {['work', 'break', 'longBreak'].map(m => (
+                                <Button
+                                    key={m}
+                                    onClick={() => setMode(m)}
+                                    variant="ghost"
+                                    className={cn("px-4 py-1 h-auto text-sm transition-colors", mode === m && colorMap[m].button)}
+                                >
+                                    {m === 'work' ? 'Focus' : m === 'break' ? 'Short Break' : 'Long Break'}
+                                </Button>
+                            ))}
+                        </div>
+                        <div className="relative my-4">
+                            <ProgressCircle progress={progress} colorClass={colorMap[mode].progress} />
+                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                                <div className="flex items-end drop-shadow-xl text-white">
+                                    <span className="text-7xl font-mono font-bold tabular-nums">{minutes}</span>
+                                    <span className="text-5xl font-mono pb-1 tabular-nums">:{seconds}</span>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="link" className="text-gray-400 hover:text-white h-auto p-1 max-w-[250px] truncate">
-                                <LinkIcon className="mr-2 h-4 w-4 shrink-0" />
-                                <span className="truncate">{linkedTask ? linkedTask.task : "Link task"}</span>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent className="bg-gray-800 border-gray-700 text-white max-h-60 overflow-y-auto">
-                            <DropdownMenuItem onSelect={() => setLinkedTask(null)} className="focus:bg-gray-700 cursor-pointer"><em>Unlink Task</em></DropdownMenuItem>
-                            {tasks.map(task => (
-                                <DropdownMenuItem key={task.id} onSelect={() => setLinkedTask(task)} className="focus:bg-gray-700 cursor-pointer">{task.task}</DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                    <TimerControls isRunning={isRunning} startTimer={startTimer} pauseTimer={pauseTimer} resetTimer={resetTimer} skipMode={skipMode} />
-                    <Button variant="link" className="text-gray-500 mt-2 h-auto p-1 text-xs" onClick={() => setIsMinimized(prev => !prev)}>Minimize (M)</Button>
-                </CardContent>
-            </Card>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="link" className="text-gray-400 hover:text-white h-auto p-1 max-w-[250px] truncate">
+                                    <LinkIcon className="mr-2 h-4 w-4 shrink-0" />
+                                    <span className="truncate">{linkedTask ? linkedTask.task : "Link task"}</span>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="bg-gray-800 border-gray-700 text-white max-h-60 overflow-y-auto">
+                                <DropdownMenuItem onSelect={() => setLinkedTask(null)} className="focus:bg-gray-700 cursor-pointer"><em>Unlink Task</em></DropdownMenuItem>
+                                {tasks.map(task => (
+                                    <DropdownMenuItem key={task.id} onSelect={() => setLinkedTask(task)} className="focus:bg-gray-700 cursor-pointer">{task.task}</DropdownMenuItem>
+                                ))}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                        <TimerControls isRunning={isRunning} startTimer={startTimer} pauseTimer={pauseTimer} resetTimer={resetTimer} skipMode={skipMode} />
+                        <Button variant="link" className="text-gray-500 mt-2 h-auto p-1 text-xs" onClick={() => setIsMinimized(prev => !prev)}>Minimize (M)</Button>
+                    </CardContent>
+                </Card>
+            </div>
             <SessionSettings isOpen={isSettingsOpen} setIsOpen={setIsSettingsOpen} settings={settings} updateSettings={updateSettings} isRunning={isRunning} />
         </div>
     );

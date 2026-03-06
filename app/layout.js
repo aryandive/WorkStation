@@ -55,25 +55,36 @@ export const metadata = {
     icon: '/favicon.ico',
     apple: '/apple-icon.png', // Add this to public/ if you have it
   },
+  // --- PWA: iOS Safari native display ---
+  // Makes "Add to Home Screen" launches go fullscreen (no Safari URL bar).
+  // statusBarStyle 'black-translucent' lets app content extend under the
+  // iOS status bar — we counteract this with env(safe-area-inset-*) in CSS.
+  appleWebApp: {
+    capable: true,
+    title: 'Work Station',
+    statusBarStyle: 'black-translucent',
+  },
 };
 
 // 3. Viewport Configuration (Separated in Next.js 14)
 export const viewport = {
-  themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
-    { media: '(prefers-color-scheme: dark)', color: '#09090b' },
-  ],
+  // Single dark color — matches manifest theme_color & app background.
+  // This colors the Android status bar and the minimal-ui address bar.
+  themeColor: '#030712',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 1, // UX: Prevents input zooming on mobile
   userScalable: false,
+  // viewportFit=cover lets content extend under iPhone notch/dynamic island.
+  // Safe-area padding in globals.css keeps content clear of hardware edges.
+  viewportFit: 'cover',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-screen bg-background text-foreground`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased min-h-[100dvh] bg-background text-foreground`}
       >
         <AuthProvider>
           <SubscriptionProvider>

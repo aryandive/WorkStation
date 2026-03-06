@@ -41,20 +41,23 @@ const UserStatusBadge = ({ user, isPro, authLoading, subLoading }) => {
 };
 
 // Reusable IconButton component
+// Desktop (md+): identical to original p-2 sizing.
+// Mobile (<md): 44×44px HIG tap target via max-md: prefixes — icon size unchanged.
 const IconButton = ({ src, alt, tooltip, onClick, href }) => {
     const content = (
         <button
             onClick={onClick}
-            className="p-2 bg-black/20 border border-white/10 rounded-full hover:bg-white/20 transition-colors duration-200"
+            aria-label={alt}
+            className="p-2 max-md:p-0 max-md:min-w-[44px] max-md:min-h-[44px] max-md:flex max-md:items-center max-md:justify-center bg-black/20 border border-white/10 rounded-full hover:bg-white/20 active:md:bg-transparent transition-colors duration-200"
         >
-            <Image width={20} height={20} src={src} alt={alt} className="invert-[.8]" />
+            <Image width={20} height={20} src={src} alt="" aria-hidden="true" className="invert-[.8]" />
         </button>
     );
 
     return (
         <TooltipProvider delayDuration={100}>
             <Tooltip>
-                <TooltipTrigger asChild>{href ? <a href={href} target="_blank" rel="noopener noreferrer">{content}</a> : content}</TooltipTrigger>
+                <TooltipTrigger asChild>{href ? <a href={href} target="_blank" rel="noopener noreferrer" aria-label={alt}>{content}</a> : content}</TooltipTrigger>
                 <TooltipContent className="bg-gray-800 text-white border-gray-700"><p>{tooltip}</p></TooltipContent>
             </Tooltip>
         </TooltipProvider>
@@ -146,6 +149,7 @@ export default function TopRightNav() {
                         <TooltipProvider delayDuration={100}>
                             <Tooltip>
                                 <TooltipTrigger asChild>
+                                    {/* Desktop: original p-2. Mobile: hidden (parent is hidden md:block so this only renders on md+) */}
                                     <div className={`p-2 rounded-full border transition-all cursor-help ${syncStatus.style}`}>
                                         {syncStatus.icon}
                                     </div>

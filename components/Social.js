@@ -8,7 +8,7 @@ export default function Social() {
     const [open, setOpen] = useState(false);
 
     return (
-        <div className="relative flex justify-center items-center">
+        <div className="relative flex justify-center items-center z-20">
             {/* Main Button */}
             <button
                 onClick={() => setOpen(!open)}
@@ -31,7 +31,7 @@ export default function Social() {
 
             <div className='absolute left-0'>
                 {/* Social Media Icons */}
-                <div className={`absolute flex gap-0 transition-all duration-500 ${open ? '-translate-y-32 opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                <div className={`absolute flex gap-0 transition-all duration-500 left-0 ${open ? '-translate-y-32 opacity-100' : 'opacity-0 pointer-events-none'}`}>
                     <a href="https://facebook.com" target="_blank" rel="noopener noreferrer" aria-label="Facebook">
                         <div className="w-12 h-12 flex justify-center items-center shadow-md hover:scale-110 transition">
                             {/* Your Facebook SVG */}

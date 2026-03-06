@@ -380,9 +380,9 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
     return (
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
-            <DialogContent className="max-w-4xl h-[70vh] bg-gray-900 text-white border-gray-700 flex p-0">
-                <aside className="w-1/4 bg-gray-950/50 border-r border-gray-800 p-4 flex flex-col">
-                    <h2 className="text-lg font-bold mb-4 flex items-center gap-2"><Folder size={20} /> Projects</h2>
+            <DialogContent className="w-[95vw] max-w-lg md:max-w-4xl h-[85vh] md:h-[70vh] bg-gray-900 text-white border-gray-700 flex flex-col md:flex-row p-0 overflow-hidden">
+                <aside className="w-full md:w-[28%] bg-gray-950/50 border-b border-gray-800 md:border-b-0 md:border-r p-2 md:p-4 flex flex-col min-w-0 h-[30%] md:h-auto">
+                    <h2 className="text-sm md:text-lg font-bold mb-3 md:mb-4 flex items-center gap-1.5 truncate"><Folder size={16} className="shrink-0" /><span className="truncate">Projects</span></h2>
                     {/* Fixed scrollable container */}
                     <div className="flex-grow overflow-y-auto custom-scrollbar min-h-0">
                         {projects.map(p => (
@@ -441,7 +441,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                     </div>
                 </aside>
 
-                <main className="w-3/4 p-6 flex flex-col relative">
+                <main className="flex-1 min-w-0 p-3 md:p-6 flex flex-col relative">
                     <DialogHeader className="flex flex-row items-center justify-between mb-4 space-y-0">
                         <div>
                             <DialogTitle className="text-2xl text-yellow-400 flex items-center gap-2">
