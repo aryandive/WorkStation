@@ -441,7 +441,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
                     </div>
                 </aside>
 
-                <main className="flex-1 min-w-0 p-3 md:p-6 flex flex-col relative">
+                <main className="flex-1 min-w-0 min-h-0 overflow-hidden p-3 md:p-6 flex flex-col relative">
                     <DialogHeader className="flex flex-row items-center justify-between mb-4 space-y-0">
                         <div>
                             <DialogTitle className="text-2xl text-yellow-400 flex items-center gap-2">
