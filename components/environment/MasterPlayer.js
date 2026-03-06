@@ -48,7 +48,7 @@ const SoundPlayer = ({ src, volume, isPlaying, setSoundLoading, reportAudioError
     );
 };
 
-export default function MasterPlayer() {
+export default function MasterPlayer({ hasInteracted = true }) {
     const {
         activeScene, activeSounds, soundVolumes, youtube, isGlobalPlaying, isLoaded,
         setSoundLoading, reportAudioError, audioAllowed, resolveAudioError
@@ -76,11 +76,13 @@ export default function MasterPlayer() {
 
     const protectMedia = (e) => { e.preventDefault(); return false; };
 
-    const studyModeSrc = youtube.id
+    // Gate on hasInteracted: empty src until user grants media permission on iOS.
+    // Desktop: hasInteracted defaults to true (set in app/page.js useEffect) so no change.
+    const studyModeSrc = (hasInteracted && youtube.id)
         ? `https://www.youtube-nocookie.com/embed/${youtube.id}?autoplay=1&mute=${youtube.isMuted ? 1 : 0}&controls=${youtube.showControls ? 1 : 0}&rel=0&showinfo=0&modestbranding=1&playsinline=1&loop=1&playlist=${youtube.id}&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`
         : "";
 
-    const bgYoutubeSrc = activeScene.type === 'youtube-scene'
+    const bgYoutubeSrc = (hasInteracted && activeScene.type === 'youtube-scene')
         ? `https://www.youtube-nocookie.com/embed/${activeScene.videoId}?autoplay=1&mute=1&controls=0&rel=0&showinfo=0&modestbranding=1&iv_load_policy=3&playsinline=1&loop=1&playlist=${activeScene.videoId}&disablekb=1&fs=0&origin=${typeof window !== 'undefined' ? window.location.origin : ''}`
         : "";
 

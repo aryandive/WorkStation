@@ -1,22 +1,27 @@
 "use client";
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEnvironment } from '@/context/EnvironmentContext';
 import { useAuth } from '@/context/AuthContext';
 import TimeWidget from '@/components/Time';
 import Social from '@/components/Social';
-import TodoList from '@/components/TodoList';
-import PomodoroTimer from '@/components/PomodoroTimer';
-import StatsPopup from '@/components/stats/StatsPopup';
-import EnvironmentPanel from '@/components/environment/EnvironmentPanel';
-import MasterPlayer from '@/components/environment/MasterPlayer';
 import TopRightNav from '@/components/TopRightNav';
-import SignUpModal from '@/components/auth/SignUpModal';
 import { cn } from '@/lib/utils';
-import { Eye, EyeOff } from 'lucide-react'; // Replaced Play/Pause with Eye/EyeOff
+import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import dynamic from 'next/dynamic';
+
+// --- Dynamic (lazy) imports — NOT included in the initial JS bundle ---
+// ssr: false — these components use window/document/iframes and must not run server-side.
+// They are code-split automatically; Next.js fetches their chunk only when needed.
+const MasterPlayer = dynamic(() => import('@/components/environment/MasterPlayer'), { ssr: false });
+const EnvironmentPanel = dynamic(() => import('@/components/environment/EnvironmentPanel'), { ssr: false });
+const PomodoroTimer = dynamic(() => import('@/components/PomodoroTimer'), { ssr: false });
+const TodoList = dynamic(() => import('@/components/TodoList'), { ssr: false });
+const StatsPopup = dynamic(() => import('@/components/stats/StatsPopup'), { ssr: false });
+const SignUpModal = dynamic(() => import('@/components/auth/SignUpModal'), { ssr: false });
 
 export default function PomodoroTimerPage() {
   const [isTodoOpen, setIsTodoOpen] = useState(false);
@@ -33,6 +38,17 @@ export default function PomodoroTimerPage() {
   const [isZenMode, setIsZenMode] = useState(false);
   // Logo menu: hover on desktop, click-toggle on mobile
   const [isLogoMenuOpen, setIsLogoMenuOpen] = useState(false);
+
+  // --- iOS Autoplay Unlock ---
+  // Desktop auto-gets permission (no overlay shown).
+  // Mobile starts locked; user taps "Enter Flow State" to grant media permissions.
+  const [hasInteracted, setIsInteracted] = useState(false);
+  useEffect(() => {
+    // Any screen >= 768px (Tailwind md:) is treated as desktop — skip overlay.
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      setIsInteracted(true);
+    }
+  }, []);
 
   // Contexts
   const { toggleGlobalPlay } = useEnvironment(); // Kept in case you want to map it to a keybind later, but removed from UI
@@ -72,7 +88,33 @@ export default function PomodoroTimerPage() {
   return (
     <>
       <div className="relative h-screen overflow-hidden bg-black">
-        <MasterPlayer />
+        <MasterPlayer hasInteracted={hasInteracted} />
+
+        {/* ── Mobile "Enter Flow State" Unlock Overlay ───────────────────────────
+             iOS Safari blocks autoplay without a user gesture. Desktop is exempt:
+             hasInteracted auto-sets to true on mount for screens ≥ 768 px.
+             On mobile this overlay is the very first tap — it grants the browser
+             a user-gesture token so all audio / youtube iframes can autoplay.    */}
+        {!hasInteracted && (
+          <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-black/70 backdrop-blur-xl animate-in fade-in duration-500">
+            {/* Logo */}
+            <Image src="/logo.webp" alt="Work Station" width={64} height={64} className="rounded-2xl mb-6 shadow-2xl" />
+            <h1 className="text-white text-3xl font-black tracking-tight mb-2">Work Station</h1>
+            <p className="text-white/50 text-sm mb-10 tracking-widest uppercase">Your immersive focus environment</p>
+
+            {/* This tap grants iOS media permissions for the session */}
+            <button
+              onClick={() => {
+                setIsInteracted(true);
+                if (typeof toggleGlobalPlay === 'function') toggleGlobalPlay();
+              }}
+              className="px-10 py-4 rounded-2xl font-bold text-black text-lg bg-gradient-to-r from-yellow-400 to-yellow-500 shadow-[0_0_40px_rgba(234,179,8,0.4)] hover:shadow-[0_0_60px_rgba(234,179,8,0.6)] active:scale-95 transition-all duration-200"
+            >
+              ✦ Enter Flow State
+            </button>
+            <p className="mt-6 text-white/25 text-xs">Tap to unlock ambient audio &amp; video</p>
+          </div>
+        )}
 
         {/* --- Top UI Zone --- 
             Wraps both Left and Right Top UI. 
@@ -85,7 +127,7 @@ export default function PomodoroTimerPage() {
         >
           {/* Top Left: Logo, Goal & Zen Toggle */}
           <div className={cn("flex flex-col gap-4", fadeClass)}>
-            <Image width={50} height={50} src="/logo.webp" alt="Work Station Logo" className="rounded-md" />
+            <Image width={50} height={50} src="/logo.webp" alt="Work Station Logo" className="rounded-md" priority />
             <div>
               <h2 className='text-gray-300 text-sm tracking-widest'>TODAY&apos;S FOCUS</h2>
               <h1 className='text-2xl font-bold text-white'>Focus Goal</h1>
