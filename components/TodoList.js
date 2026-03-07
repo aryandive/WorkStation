@@ -488,7 +488,7 @@ export default function TodoList({ isOpen, setIsOpen, onTaskTimeUpdateRef }) {
 
                     {loading ? <p>Loading tasks...</p> : (
                         <TooltipProvider>
-                            <div className="flex-grow overflow-y-auto pr-2 custom-scrollbar pb-20">
+                            <div className="flex-grow overflow-y-auto min-h-0 pr-2 custom-scrollbar pb-20">
                                 {displayedTasks.length > 0 ? (
                                     displayedTasks.map(task => <TaskItem key={task.id} task={task} allTasks={tasks} onUpdate={updateTask} onDelete={deleteTask} onAddTask={addTask} />)
                                 ) : (
